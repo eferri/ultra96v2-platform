@@ -1,0 +1,23 @@
+version: '3.9'
+
+services:
+  xil:
+    build:
+      context: docker
+      network: host
+    image: xil:latest
+    # tty: true
+    stdin_open: true
+    privileged: true
+    network_mode: host
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - .:/app
+    environment:
+      - DISPLAY
+  server:
+    image: httpd:latest
+    volumes:
+      - ./static:/usr/local/apache2/htdocs:ro
+    ports:
+      - 8080:80

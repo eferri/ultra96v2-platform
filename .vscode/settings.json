@@ -1,0 +1,21 @@
+{
+    "[systemverilog]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false
+    },
+    "[tcl]": {
+        "editor.formatOnSave": false
+    },
+    "systemverilog.includeIndexing": [
+        "rtl/*.sv",
+        "sim/*.sv",
+        "build-hw/bd/zynqmp/sim/zynqmp.v"
+    ],
+    "systemverilog.formatCommand": "verible-verilog-format",
+    "systemverilog.compilerType": "Verilator",
+    "systemverilog.antlrVerification": true,
+    "systemverilog.launchConfiguration": "verilator --sv --lint-only --language 1800-2017 --Wall -I rtl -I sim -I build-hw/bd/zynqmp/sim/",
+    "systemverilog.compileOnSave": true,
+    "editor.formatOnSave": true,
+}

@@ -1,0 +1,6 @@
+fpga_only_image:
+{
+  [bootloader, destination_cpu = a53-0] build-sw/zynqmp_fsbl.elf
+  [destination_cpu=pmu] build-sw/zynqmp_pmufw.elf
+  [destination_device=pl] build-hw/system.bit
+}

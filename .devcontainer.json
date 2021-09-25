@@ -1,0 +1,13 @@
+{
+    "name": "xil",
+    "image": "xil:latest",
+    "extensions": [
+        "ms-azuretools.vscode-docker",
+        "ms-vscode.cpptools",
+        "bitwisecook.tcl",
+        "shardulm94.trailing-spaces",
+        "eirikpre.systemverilog"
+    ],
+    "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=default",
+    "workspaceFolder": "/app",
+}
