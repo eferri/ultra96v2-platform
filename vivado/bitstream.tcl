@@ -18,6 +18,9 @@ place_design
 phys_opt_design
 route_design
 
+report_methodology
+report_timing_summary -warn_on_violation -no_detailed_paths
+
 write_verilog -force build-hw/impl_netlist.v
 write_xdc -force -no_fixed_only build-hw/impl.xdc
 write_checkpoint -force build-hw/impl.dcp

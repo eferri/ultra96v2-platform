@@ -15,9 +15,9 @@ create_bd_design -dir build-hw/bd zynqmp
 set bd_file build-hw/bd/zynqmp/zynqmp.bd
 
 # Blocks
-create_bd_cell -type ip -vlnv xilinx.com:ip:zynq_ultra_ps_e:3.3 zynqmp
+create_bd_cell -type ip -vlnv xilinx.com:ip:zynq_ultra_ps_e:3.4 zynqmp
 set_property SELECTED_SIM_MODEL rtl [get_bd_cells zynqmp]
-apply_bd_automation -rule xilinx.com:bd_rule:zynq_ultra_ps_e -config {apply_board_preset "1" } [get_bd_cells zynqmp]
+apply_bd_automation -rule xilinx.com:bd_rule:zynq_ultra_ps_e -config {apply_board_preset "1"} [get_bd_cells zynqmp]
 
 set_property -dict [ list \
     CONFIG.PSU__PMU__GPO2__POLARITY {high} \

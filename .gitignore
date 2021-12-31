@@ -1,13 +1,10 @@
 build*
-static
+static/*
+!static/.gitkeep
 .Xil
 
 *.jou
 *.log
-
-docker/*.bin
-docker/*.tar.gz
-docker/Xilinx_Unified*
 
 *.xml
 *.html
@@ -19,3 +16,4 @@ docker/Xilinx_Unified*
 *.pb
 
 .ip_user_files
+tight_setup_hold_pins.txt

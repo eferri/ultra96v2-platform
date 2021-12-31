@@ -1,17 +1,16 @@
-version: '3.9'
-
 services:
   xil:
     build:
       context: docker
       network: host
     image: xil:latest
-    # tty: true
+    tty: true
     stdin_open: true
     privileged: true
     network_mode: host
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
+      - ~/.Xauthority:/home/xil/.Xauthority
       - .:/app
     environment:
       - DISPLAY

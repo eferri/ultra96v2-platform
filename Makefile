@@ -1,27 +1,58 @@
-PART := xczu3eg-sbva484-1-i
-BOARD_PART := avnet.com:ultra96v2:part0:1.2
+PART ?= xczu3eg-sbva484-1-i
+BOARD_PART ?= avnet.com:ultra96v2:part0:1.2
 
-XIL_INSTALLER := Xilinx_Unified_2021.2_1021_0703
-XIL_INSTALLER_FILE := $(XIL_INSTALLER).tar.gz
-XIL_INSTALLER_MD5 := c6f91186f332528a7b74a6a12a759fb6
+#
+# inputs
+#
 
-RTL_SRCS := \
-	rtl/up_counter.sv
+XIL_VERSION := 2022.2
+XIL_INSTALLER := Xilinx_Unified_$(XIL_VERSION)_1014_8888
+XIL_INSTALLER_TAR := $(XIL_INSTALLER).tar.gz
+XIL_INSTALLER_MD5 := 4b4e84306eb631fe67d3efb469122671
 
-SYNTH_SRCS := \
+RTL_SRCS ?= \
+	rtl/flash.sv
+
+SYNTH_SRCS ?= \
 	$(RTL_SRCS) \
 	rtl/top.sv
 
-VERILATOR_SRCS := \
-	sim/tb.cpp \
-	sim/verilator_top.sv
-
-SIM_SRCS := \
+SIM_SRCS ?= \
 	sim/tb.sv
+
+#
+# outputs
+#
+
+BIN := build-sw/BOOT.BIN
+PMUFW := build-sw/zynqmp_pmufw.elf
+FSBL := build-sw/zynqmp_fsbl.elf
+
+SYSROOT := petalinux/images/linux/sdk/sysroots/aarch64-xilinx-linux
+
+BIT := build-hw/system.bit
+IMPL := build-hw/impl.dcp
+SYNTH := build-hw/synth.dcp
+XSA := build-hw/zynqmp.xsa
+PETALINUX_XSA := petalinux/project-spec/hw-description/system.xsa
+BD := build-hw/bd/zynqmp/zynqmp.bd
+
+XSIM_EXEC := build-hw/sim/xsim/tb.sh
+
+
+.PHONY: all
+all: $(SIM_EXEC) $(XSIM_EXEC) $(BIN)
+
+#
+# docker
+#
 
 # Run command in bash shell with xilinx tools sourced
 DOCKER_RUN := docker compose run --rm xil
 XIL_BASH := $(DOCKER_RUN) bash -ic
+
+PETALINUX_RUN := docker compose run --rm -w /app/petalinux xil
+PETALINUX_BASH := $(PETALINUX_RUN) bash -ic
 
 .PHONY: shell
 shell:
@@ -29,29 +60,32 @@ shell:
 
 .PHONY: docker
 docker-image:
-	docker compose up -d server && \
-	docker compose build --progress=tty \
+	docker compose up -d server \
+	&& docker compose build --progress=tty \
+		--build-arg XIL_VERSION=$(XIL_VERSION) \
 		--build-arg XIL_INSTALLER=$(XIL_INSTALLER) \
-		--build-arg XIL_INSTALLER_MD5=$(XIL_INSTALLER_MD5) && \
-	docker compose down
+		--build-arg XIL_INSTALLER_TAR=$(XIL_INSTALLER_TAR) \
+		--build-arg XIL_INSTALLER_MD5=$(XIL_INSTALLER_MD5) \
+	&& docker compose down
 
-# ----------------------------- Vivado/Vitis ------------------------------------
+#
+# linux
+#
 
-BIN := build-sw/BOOT.BIN
-PMUFW := build-sw/zynqmp_pmufw.elf
-FSBL := build-sw/zynqmp_fsbl.elf
+U_BOOT := build-linux/u-boot.elf
+LINUX := build-linux/image.bin
 
-BIT := build-hw/system.bit
-IMPL := build-hw/impl.dcp
-SYNTH := build-hw/synth.dcp
-XSA := build-hw/zynqmp.xsa
-BD := build-hw/bd/zynqmp/zynqmp.bd
+.PHOHNY: u-boot
+u-boot $(U_BOOT): | build-linux
+	$(MAKE) -C submodules/u-boot
 
-SIM_EXEC := build-verilator/sim
-XSIM_EXEC := build-hw/sim/xsim/tb.sh
+.PHOHNY: linux
+linux $(LINUX): | build-linux
+	$(MAKE) -C submodules/linux
 
-.PHONY: all
-all: $(SIM_EXEC) $(XSIM_EXEC) $(BIN)
+#
+# vivado / vitis
+#
 
 .PHONY: bin
 bin $(BIN): $(PMUFW) $(FSBL) $(BIT)
@@ -63,16 +97,16 @@ fw $(PMUFW) $(FSBL): $(XSA) vitis/platform.tcl | build-sw
 
 VIVADO_ARGS := -nojournal -nolog
 
-.PHONY: impl
-impl $(IMPL) $(BIT): $(SYNTH) vivado/bitstream.tcl | build-hw
+.PHONY: impl bit
+impl bit $(IMPL) $(BIT): $(SYNTH) vivado/bitstream.tcl | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source vivado/bitstream.tcl'
 
 .PHONY: synth
 synth $(SYNTH): vivado/synth.tcl $(BD) vivado/constraints.xdc $(SYNTH_SRCS) | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source vivado/synth.tcl -tclargs $(PART) $(BOARD_PART) $(SYNTH_SRCS)'
 
-.PHONY: bd
-bd $(BD) $(XSA): vivado/write_bd.tcl vivado/bd.tcl | build-hw
+.PHONY: bd xsa
+bd xsa $(BD) $(XSA): vivado/write_bd.tcl vivado/bd.tcl | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source vivado/write_bd.tcl -tclargs $(PART) $(BOARD_PART)'
 
 # Interactive commands
@@ -84,7 +118,48 @@ vivado-shell:
 edit-bd: | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode tcl -source vivado/edit_bd.tcl -tclargs $(PART) $(BOARD_PART)'
 
-# ------------------------------- Target ------------------------------------------
+
+#
+# petalinux
+#
+
+.PHONY: petalinux-xsa
+petalinux-xsa $(PETALINUX_XSA): $(XSA)
+	$(PETALINUX_BASH) 'petalinux-config --silentconfig --get-hw-description=../$(dir $(XSA))'
+
+.PHONY: petalinux-build
+petalinux-build: $(PETALINUX_XSA)
+	$(PETALINUX_BASH) 'petalinux-build'
+
+.PHONY: petalinux-package
+petalinux-package:
+	$(PETALINUX_BASH) 'petalinux-package --wic --wks project-spec/meta-avnet/recipes-core/images/avnet-image-minimal.wks'
+
+.PHONY: sysroot
+sysroot:
+	$(PETALINUX_BASH) 'petalinux-build --sdk && petalinux-package --sysroot && touch $(SYSROOT)'
+
+.PHONY: rootfs-config
+rootfs-config: $(PETALINUX_XSA)
+	$(PETALINUX_BASH) 'petalinux-config -c rootfs'
+
+.PHONY: petalinux-config
+petalinux-config: $(PETALINUX_XSA)
+	$(PETALINUX_BASH) 'petalinux-config'
+
+.PHONY: petalinux-clean
+petalinux-clean:
+	$(RM) -rf \
+		petalinux/build \
+		petalinux/images \
+		petalinux/components \
+		petalinux/project-spec/configs/*.old \
+		petalinux/project-spec/hw-description/psu* project-spec/hw-description/*.xsa \
+		petalinux/project-spec/hw-description/*.bit
+
+#
+# target
+#
 
 .PHONY: hw-debug
 hw-debug:
@@ -101,27 +176,28 @@ INSTALL_FILES += build-sw/BOOT.BIN
 sd:
 	$(DOCKER_RUN) ./scripts/sd_utils.sh all $(INSTALL_FILES)
 
-# ----------------------------- Xilinx Config -------------------------------------
+#
+# xinlinx installer
+#
 
 .PHONY: xil-extract
-xil-extract $(XIL_INSTALLER): | static
-	md5sum static/${XIL_INSTALLER_FILE} | grep ${XIL_INSTALLER_MD5} && \
-	tar -xvf static/$(XIL_INSTALLER_FILE) -C static
+xil-extract static/$(XIL_INSTALLER):
+	md5sum static/${XIL_INSTALLER_TAR} | grep ${XIL_INSTALLER_MD5} \
+	&& tar -I pigz -xvf static/$(XIL_INSTALLER_TAR) -C static
 
- .PHONY: xil-config
-xil-config: | $(XIL_INSTALLER) static
-	static/$(XIL_INSTALLER)/xsetup -b ConfigGen -l /xilinx && \
-	cp $$HOME/.Xilinx/install_config.txt docker
+ .PHONY: vitis-install-config
+vitis-config: | static/$(XIL_INSTALLER)
+	static/$(XIL_INSTALLER)/xsetup -b ConfigGen -l /xilinx \
+	&& cp $$HOME/.Xilinx/install_config.txt docker/vitis_config.txt
 
-# ------------------------------ Simulation -----------------------------------
+ .PHONY: petalinux-install-config
+petalinux-install-config: | static/$(XIL_INSTALLER)
+	static/$(XIL_INSTALLER)/xsetup -b ConfigGen -l /xilinx \
+	&& cp $$HOME/.Xilinx/install_config.txt docker/petalinux_config.txt
 
-VERILATOR_ARGS := -sv --cc --exe --top verilator_top -Wall --trace-fst \
-				 --timescale 1ns/1ns --threads $$(nproc) --trace-threads $$(nproc) \
-				 -MAKEFLAGS -j$$(nproc) -Mdir build-verilator -o sim
-
-.PHONY: verilate
-verilate $(SIM_EXEC): $(VERILATOR_SRCS) $(RTL_SRCS) | build-verilator
-	$(XIL_BASH) 'verilator $(VERILATOR_ARGS) --build $(VERILATOR_SRCS) $(RTL_SRCS)'
+#
+# simulation
+#
 
 .PHONY: sim
 sim: $(SIM_EXEC)
@@ -147,8 +223,12 @@ xsim-clean:
 xsim-waves:
 	$(DOCKER_RUN) gtkwave build-hw/sim/xsim/waves.vcd
 
+#
+# misc
+#
+
 .PHONY: cleanall
-cleanall:
+cleanall: petalinux-clean
 	rm -rf static/$(XIL_INSTALLER) \
 		build* \
 		*.log \
@@ -159,7 +239,8 @@ cleanall:
 		*.fst \
 		*.hier \
 		*.str \
-		*.pb
+		*.pb \
+		tight_setup_hold_pins.txt
 
-build-hw build-sw build-sim build-verilator static:
+build-hw build-sw build-sim build-linux:
 	mkdir -p $@

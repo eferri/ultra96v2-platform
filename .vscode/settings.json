@@ -7,15 +7,21 @@
     "[tcl]": {
         "editor.formatOnSave": false
     },
-    "systemverilog.includeIndexing": [
-        "rtl/*.sv",
-        "sim/*.sv",
-        "build-hw/bd/zynqmp/sim/zynqmp.v"
-    ],
-    "systemverilog.formatCommand": "verible-verilog-format",
-    "systemverilog.compilerType": "Verilator",
-    "systemverilog.antlrVerification": true,
-    "systemverilog.launchConfiguration": "verilator --sv --lint-only --language 1800-2017 --Wall -I rtl -I sim -I build-hw/bd/zynqmp/sim/",
-    "systemverilog.compileOnSave": true,
     "editor.formatOnSave": true,
+    "search.exclude": {
+        "submodules": true
+    },
+    "systemverilog.includeIndexing": [
+        "**/rtl/**/*.{sv, svh, v, vh}",
+        "**/sim/**/*.{sv, svh, v, vh}"
+    ],
+    "systemverilog.antlrVerification": true,
+    "systemverilog.excludeIndexing": "**/rtl/top.sv",
+    "systemverilog.excludeCompiling": "**/rtl/top.sv",
+    "systemverilog.formatCommand": "verible-verilog-format",
+    "systemverilog.compilerType": "Verible",
+    "systemverilog.launchConfigurationVerible": "verible-verilog-lint --ruleset all",
+    "systemverilog.compileOnOpen": false,
+    "systemverilog.compileOnSave": false,
+    "systemverilog.verifyOnOpen": true
 }

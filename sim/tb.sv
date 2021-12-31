@@ -2,12 +2,16 @@
 module tb;
   logic led_1;
   logic led_2;
+  logic uart_tx;
+  logic uart_rx;
 
   const int period = 2;
 
   top pl_top (
       .led_1,
-      .led_2
+      .led_2,
+      .uart_rx,
+      .uart_tx
   );
 
   initial begin

@@ -6,8 +6,9 @@
         "ms-vscode.cpptools",
         "bitwisecook.tcl",
         "shardulm94.trailing-spaces",
-        "eirikpre.systemverilog"
+        "eirikpre.systemverilog",
+        "eugenwiens.bitbake"
     ],
     "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=default",
-    "workspaceFolder": "/app",
+    "workspaceFolder": "/app"
 }

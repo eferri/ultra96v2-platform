@@ -1,23 +1,25 @@
 
 module top (
     output logic led_1,
-    output logic led_2
+    output logic led_2,
+    output logic uart_tx,
+    input  logic uart_rx
 );
   logic clk;
   logic reset;
-  logic [31:0] count;
 
   zynqmp zynqmp (
       .clk,
       .reset
   );
 
-  up_counter counter_0 (
-      .clk,
-      .reset,
-      .count
+  flash flash_0 (
+      .i_clk  (clk),
+      .i_reset(reset),
+      .o_led  (led_1)
   );
 
-  assign {led_1, led_2} = count[25:24];
+  assign led_2   = 1'b1;
+  assign uart_tx = uart_rx;
 
 endmodule
