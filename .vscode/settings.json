@@ -2,7 +2,8 @@
     "[systemverilog]": {
         "editor.tabSize": 2,
         "editor.insertSpaces": true,
-        "editor.detectIndentation": false
+        "editor.detectIndentation": false,
+        "editor.defaultFormatter": "mshr-h.veriloghdl"
     },
     "[tcl]": {
         "editor.formatOnSave": false
@@ -11,17 +12,8 @@
     "search.exclude": {
         "submodules": true
     },
-    "systemverilog.includeIndexing": [
-        "**/rtl/**/*.{sv, svh, v, vh}",
-        "**/sim/**/*.{sv, svh, v, vh}"
-    ],
-    "systemverilog.antlrVerification": true,
-    "systemverilog.excludeIndexing": "**/rtl/top.sv",
-    "systemverilog.excludeCompiling": "**/rtl/top.sv",
-    "systemverilog.formatCommand": "verible-verilog-format",
-    "systemverilog.compilerType": "Verible",
-    "systemverilog.launchConfigurationVerible": "verible-verilog-lint --ruleset all",
-    "systemverilog.compileOnOpen": false,
-    "systemverilog.compileOnSave": false,
-    "systemverilog.verifyOnOpen": true
+    "verilog.formatting.veribleVerilogFormatter.path": "verible-verilog-format",
+    "verilog.languageServer.veribleVerilogLs.enabled": true,
+    "verilog.languageServer.veribleVerilogLs.path": "verible-verilog-ls",
+    "verilog.linting.linter": "verilator"
 }

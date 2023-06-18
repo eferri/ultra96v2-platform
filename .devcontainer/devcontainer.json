@@ -1,14 +1,19 @@
 {
     "name": "xil",
     "image": "xil:latest",
-    "extensions": [
-        "ms-azuretools.vscode-docker",
-        "ms-vscode.cpptools",
-        "bitwisecook.tcl",
-        "shardulm94.trailing-spaces",
-        "eirikpre.systemverilog",
-        "eugenwiens.bitbake"
-    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-azuretools.vscode-docker",
+                "ms-vscode.cpptools",
+                "bitwisecook.tcl",
+                "shardulm94.trailing-spaces",
+                "eugenwiens.bitbake",
+                "mshr-h.VerilogHDL",
+                "plorefice.devicetree"
+            ]
+        }
+    },
     "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=default",
     "workspaceFolder": "/app"
 }

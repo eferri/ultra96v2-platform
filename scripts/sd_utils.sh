@@ -4,7 +4,10 @@ set -o pipefail
 
 DIR="$(git rev-parse --show-toplevel)"
 SDDEV="/dev/sda"
-BOOTFS="$DIR/build-hw/mount"
+
+BOOTFS="$DIR/build-sw/mount_bootfs"
+ROOTFS="$DIR/build-sw/mount_rootfs"
+
 PLATFORM="ultra96v2"
 
 function eject_sd {
@@ -14,13 +17,20 @@ function eject_sd {
     echo "Unmounting..."
     sudo umount "$BOOTFS" || true
 
+    echo "Unmounting..."
+    sudo umount "$ROOTFS" || true
+
     echo "Ejecting..."
     sudo eject ${SDDEV}
 }
 
-function erase_sd {
-    echo "Erasing bootfs ..."
-    sudo rm -rf "$BOOTFS/*" "$BOOTFS/.*"
+
+function unmount_sd {
+    echo "Unmounting..."
+    sync
+
+    sudo umount "$BOOTFS"
+    sudo umount "$ROOTFS"
 }
 
 function mount_sd {
@@ -31,39 +41,51 @@ function mount_sd {
     if ! mountpoint -q "$BOOTFS"; then
         sudo mount "${SDDEV}1" "$BOOTFS"
     fi
+
+    sudo mkdir -p "$ROOTFS" || true
+    if ! mountpoint -q "$ROOTFS"; then
+        sudo mount "${SDDEV}2" "$ROOTFS"
+    fi
 }
 
 function partition_sd {
     echo "Unmounting..."
-    sudo umount "$BOOTFS" || true
+    sudo umount "$ROOTFS" || true
 
     echo "Removing existing partitions ..."
     sudo parted -s ${SDDEV} rm 1 || true
+    sudo parted -s ${SDDEV} rm 2 || true
 
     echo "Partitioning drive ..."
     sudo parted -s "${SDDEV}" -a optimal mklabel msdos \
-            mkpart primary fat32 4MB 1000MB
+            mkpart primary fat32 4MB 1000MB \
+            mkpart primary ext4  1000MB 100%
     partprobe
 
     sudo mkfs.vfat -F 32 "${SDDEV}1"
+    sudo mkfs.ext4 -qF "${SDDEV}2"
 }
 
 function install {
     partition_sd
     mount_sd
-    echo "Installing application... $@"
-    sudo cp "$@" "$BOOTFS"
+
+    echo "Installing boot files... $@"
+    sudo cp -r "$@" "$BOOTFS"
+
+    echo "Installing rootfs..."
+    sudo tar -I pigz -xvf build-sw/rootfs.tar.gz -C "$ROOTFS"
+
+    sudo rm -f "$ROOTFS"/.dockerenv
+
     eject_sd
 }
 
 function usage () {
     echo "Usage: $0 MODE [FILE] [FILE] ...."
-    echo "Modes: all <files>     : mount, erase SD card, install image and eject"
-    echo "       install <files> : mount, install given files to second SD partition and eject"
+    echo "Modes: install <files> : mount, re-partition SD, install application files and rootfs and eject"
     echo "       eject           : eject SD card"
-    echo "       erase           : erase SD card"
     echo "       mount           : mount SD card"
-    echo "       boot <files>    : write boot and application files to first SD card partition"
     echo "       partition       : partition SD card"
     exit 1
 }
@@ -85,11 +107,11 @@ case "$1" in
     eject)
         eject_sd
         ;;
-    erase)
-        erase_sd
-        ;;
     mount)
         mount_sd
+        ;;
+    unmount)
+        unmount_sd
         ;;
     partition)
         partition_sd

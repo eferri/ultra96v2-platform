@@ -1,0 +1,8 @@
+boot_image:
+{
+  [bootloader, destination_cpu=a53-0] build-sw/zynqmp_fsbl.elf
+  [destination_cpu=pmu] build-sw/zynqmp_pmufw.elf
+  [trustzone, exception_level=el-3, destination_cpu=a53-0] build-sw/bl31.elf
+  [load=0x100000] build-sw/system.dtb
+  [exception_level=el-2, destination_cpu=a53-0] build-sw/u-boot.elf
+}

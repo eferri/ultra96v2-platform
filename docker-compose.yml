@@ -6,17 +6,33 @@ services:
     image: xil:latest
     tty: true
     stdin_open: true
-    privileged: true
-    network_mode: host
+
+    devices:
+      - /dev/kvm:/dev/kvm
+    # Uncomment to run jtag boot script
+    # network_mode: host
+    # privileged: true
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - ~/.Xauthority:/home/xil/.Xauthority
+      - ${XAUTHORITY}:/home/xil/.Xauthority
       - .:/app
     environment:
       - DISPLAY
   server:
     image: httpd:latest
     volumes:
-      - ./static:/usr/local/apache2/htdocs:ro
+      - ./docker:/usr/local/apache2/htdocs:ro
     ports:
       - 8080:80
+  rootfs:
+    platform: linux/arm64/v8
+    hostname: ultra96v2
+    build:
+      context: rootfs
+      dockerfile: ../docker/rootfs.Dockerfile
+    image: rootfs:latest
+    tty: true
+    stdin_open: true
+    network_mode: none
+    volumes:
+      - ./build-sw/:/build-sw

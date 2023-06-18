@@ -1,47 +1,57 @@
-PART ?= xczu3eg-sbva484-1-i
-BOARD_PART ?= avnet.com:ultra96v2:part0:1.2
+PART ?= xczu3eg-sbva484-1-e
 
 #
 # inputs
 #
 
-XIL_VERSION := 2022.2
-XIL_INSTALLER := Xilinx_Unified_$(XIL_VERSION)_1014_8888
+UID ?= 1000
+GID ?= 1000
+KVM_GID ?= 109
+
+XIL_VERSION := 2023.1
+XIL_INSTALLER := Xilinx_Unified_$(XIL_VERSION)_0507_1903
 XIL_INSTALLER_TAR := $(XIL_INSTALLER).tar.gz
-XIL_INSTALLER_MD5 := 4b4e84306eb631fe67d3efb469122671
+XIL_INSTALLER_MD5 := f2011ceba52b109e3551c1d3189a8c9c
 
 RTL_SRCS ?= \
+	rtl/top.sv \
 	rtl/flash.sv
 
-SYNTH_SRCS ?= \
-	$(RTL_SRCS) \
-	rtl/top.sv
+SYNTH_SRCS ?= $(RTL_SRCS)
 
-SIM_SRCS ?= \
-	sim/tb.sv
+SIM_SRCS ?=
+
+ALL_SRCS := $(RTL_SRCS) $(SIM_SRCS)
 
 #
 # outputs
 #
 
-BIN := build-sw/BOOT.BIN
-PMUFW := build-sw/zynqmp_pmufw.elf
+# bsp
+DTS := build-sw/system.dts
+DTB := build-sw/system.dtb
+
+ATF := build-sw/bl31.elf
+PMUFW := build-sw/zynqmp_pmufw.bin
+
+BOOT_BIN := build-sw/BOOT.bin
 FSBL := build-sw/zynqmp_fsbl.elf
+U_BOOT := build-sw/u-boot.elf
+LINUX := build-sw/Image
+FIT := build-sw/image.ub
 
-SYSROOT := petalinux/images/linux/sdk/sysroots/aarch64-xilinx-linux
+ROOTFS := build-sw/rootfs.tar.gz
 
+# fpga
 BIT := build-hw/system.bit
 IMPL := build-hw/impl.dcp
 SYNTH := build-hw/synth.dcp
 XSA := build-hw/zynqmp.xsa
-PETALINUX_XSA := petalinux/project-spec/hw-description/system.xsa
 BD := build-hw/bd/zynqmp/zynqmp.bd
-
-XSIM_EXEC := build-hw/sim/xsim/tb.sh
 
 
 .PHONY: all
-all: $(SIM_EXEC) $(XSIM_EXEC) $(BIN)
+all: $(BOOT_BIN) $(FIT) $(ROOTFS)
 
 #
 # docker
@@ -51,17 +61,21 @@ all: $(SIM_EXEC) $(XSIM_EXEC) $(BIN)
 DOCKER_RUN := docker compose run --rm xil
 XIL_BASH := $(DOCKER_RUN) bash -ic
 
-PETALINUX_RUN := docker compose run --rm -w /app/petalinux xil
-PETALINUX_BASH := $(PETALINUX_RUN) bash -ic
-
 .PHONY: shell
 shell:
 	docker compose run --rm xil bash -i
 
+.PHONY: root-shell
+root-shell:
+	docker compose run --user root --rm xil bash -i
+
 .PHONY: docker
-docker-image:
+docker-image: $(XILINX_TOKEN)
 	docker compose up -d server \
-	&& docker compose build --progress=tty \
+	&& docker compose build xil --progress=plain \
+		--build-arg UID=$(UID) \
+		--build-arg GID=$(GID) \
+		--build-arg KVM_GID=$(KVM_GID) \
 		--build-arg XIL_VERSION=$(XIL_VERSION) \
 		--build-arg XIL_INSTALLER=$(XIL_INSTALLER) \
 		--build-arg XIL_INSTALLER_TAR=$(XIL_INSTALLER_TAR) \
@@ -69,31 +83,24 @@ docker-image:
 	&& docker compose down
 
 #
-# linux
+# Generate filelist for verible tools
 #
 
-U_BOOT := build-linux/u-boot.elf
-LINUX := build-linux/image.bin
+SINGLE_LINE_SRCS := $(patsubst %,%,$(ALL_SRCS))
 
-.PHOHNY: u-boot
-u-boot $(U_BOOT): | build-linux
-	$(MAKE) -C submodules/u-boot
+SRC_HASH = SRCS_$(shell echo '$($(1))' | md5sum | awk '{print $$1}')
 
-.PHOHNY: linux
-linux $(LINUX): | build-linux
-	$(MAKE) -C submodules/linux
+verible.filelist: build-sw/$(call SRC_HASH,SINGLE_LINE_SRCS)
+	rm -f $@
+	echo $(SINGLE_LINE_SRCS) | sed 's/ /\n/g' > $@
+
+build-sw/$(call SRC_HASH,SINGLE_LINE_SRCS): | build-sw
+	rm -rf build-sw/SRCS*
+	touch $@
 
 #
-# vivado / vitis
+# vivado
 #
-
-.PHONY: bin
-bin $(BIN): $(PMUFW) $(FSBL) $(BIT)
-	$(XIL_BASH) 'bootgen -arch zynqmp -image vitis/boot.bif -w -o $(BIN)'
-
-.PHONY: fw
-fw $(PMUFW) $(FSBL): $(XSA) vitis/platform.tcl | build-sw
-	$(XIL_BASH) 'xsct vitis/platform.tcl $(XSA)'
 
 VIVADO_ARGS := -nojournal -nolog
 
@@ -103,59 +110,118 @@ impl bit $(IMPL) $(BIT): $(SYNTH) vivado/bitstream.tcl | build-hw
 
 .PHONY: synth
 synth $(SYNTH): vivado/synth.tcl $(BD) vivado/constraints.xdc $(SYNTH_SRCS) | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source vivado/synth.tcl -tclargs $(PART) $(BOARD_PART) $(SYNTH_SRCS)'
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source vivado/synth.tcl -tclargs $(PART) $(SYNTH_SRCS)'
 
 .PHONY: bd xsa
-bd xsa $(BD) $(XSA): vivado/write_bd.tcl vivado/bd.tcl | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source vivado/write_bd.tcl -tclargs $(PART) $(BOARD_PART)'
+bd xsa $(BD) $(XSA): vivado/write_bd.tcl vivado/bd.tcl vivado/zynqmp_preset.tcl | build-hw
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source vivado/write_bd.tcl -tclargs $(PART)'
 
 # Interactive commands
-.PHONY: shell
+.PHONY: vivado-shell
 vivado-shell:
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode tcl'
 
+.PHONY: vivado-gui
+vivado-gui:
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS)'
+
 .PHONY: edit-bd
 edit-bd: | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode tcl -source vivado/edit_bd.tcl -tclargs $(PART) $(BOARD_PART)'
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode tcl -source vivado/edit_bd.tcl -tclargs $(PART)'
 
 
 #
-# petalinux
+# platform software
 #
 
-.PHONY: petalinux-xsa
-petalinux-xsa $(PETALINUX_XSA): $(XSA)
-	$(PETALINUX_BASH) 'petalinux-config --silentconfig --get-hw-description=../$(dir $(XSA))'
+DTS_SRCS := \
+	device-tree/system-top.dts \
+	device-tree/system-bsp.dtsi \
+	device-tree/pcw.dtsi \
+	device-tree/zynqmp-clk-ccf.dtsi \
+	device-tree/zynqmp.dtsi
 
-.PHONY: petalinux-build
-petalinux-build: $(PETALINUX_XSA)
-	$(PETALINUX_BASH) 'petalinux-build'
+# Generate dts and pm_cfg_obj from xsct
 
-.PHONY: petalinux-package
-petalinux-package:
-	$(PETALINUX_BASH) 'petalinux-package --wic --wks project-spec/meta-avnet/recipes-core/images/avnet-image-minimal.wks'
+.PHONY: dts-gen
+dts-gen: $(XSA) scripts/dts.tcl
+	$(XIL_BASH) 'xsct scripts/dts.tcl'
 
-.PHONY: sysroot
-sysroot:
-	$(PETALINUX_BASH) 'petalinux-build --sdk && petalinux-package --sysroot && touch $(SYSROOT)'
+.PHONY: dtb
+dtb $(DTB) $(DTS): $(DTS_SRCS) | build-sw
+	$(XIL_BASH) 'gcc -I device-tree -I submodules/linux -E -nostdinc -undef \
+					 -D__DTS__ -x assembler-with-cpp -o $(DTS) device-tree/system-top.dts \
+	&& dtc -I dts -O dtb -o $(DTB) $(DTS) \
+	&& make -C ./submodules/qemu-devicetrees \
+	&& cp ./submodules/qemu-devicetrees/LATEST/MULTI_ARCH/board-zynqmp-zcu102.dtb ./build-sw/qemu_system.dtb \
+	&& cp ./submodules/qemu-devicetrees/LATEST/MULTI_ARCH/zynqmp-pmu.dtb ./build-sw/qemu_pmu.dtb'
 
-.PHONY: rootfs-config
-rootfs-config: $(PETALINUX_XSA)
-	$(PETALINUX_BASH) 'petalinux-config -c rootfs'
+.PHONY: pmufw
+pmufw $(PMUFW): | build-sw
+	$(XIL_BASH) 'sed -i "s/_BASEADDRESS 0xFF000000/_BASEADDRESS 0xFF010000/g" ./submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/misc/xparameters.h \
+	&& $(MAKE) CFLAGS="-Os -flto -ffat-lto-objects -DULTRA96_VERSION=2 -DENABLE_MOD_ULTRA96 -DENABLE_SCHEDULER" \
+		-C submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/src \
+	&& mb-objcopy -O binary submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/src/executable.elf $(PMUFW) \
+	&& cp submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/src/executable.elf build-sw/zynqmp_pmufw.elf'
 
-.PHONY: petalinux-config
-petalinux-config: $(PETALINUX_XSA)
-	$(PETALINUX_BASH) 'petalinux-config'
+.PHONY: atf
+atf $(ATF): | build-sw
+	$(XIL_BASH) '$(MAKE) -j$$(nproc) CROSS_COMPILE=aarch64-none-elf- PLAT=zynqmp ZYNQMP_CONSOLE=cadence1 RESET_TO_BL31=1 all \
+		-C submodules/arm-trusted-firmware \
+	&& cp submodules/arm-trusted-firmware/build/zynqmp/release/bl31/bl31.elf $(ATF)'
 
-.PHONY: petalinux-clean
-petalinux-clean:
-	$(RM) -rf \
-		petalinux/build \
-		petalinux/images \
-		petalinux/components \
-		petalinux/project-spec/configs/*.old \
-		petalinux/project-spec/hw-description/psu* project-spec/hw-description/*.xsa \
-		petalinux/project-spec/hw-description/*.bit
+.PHONY: fsbl
+fsbl $(FSBL): $(XSA) | build-sw
+	$(XIL_BASH) 'xsct ./scripts/fsbl.tcl \
+	&& sed -i "s/_BASEADDRESS 0xFF000000/_BASEADDRESS 0xFF010000/g" ./build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/include/xparameters.h \
+	&& $(MAKE) -C ./build-sw/fsbl \
+	&& cp build-sw/fsbl/executable.elf $(FSBL) \
+	&& cp build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/libsrc/xilpm_v5_0/src/pm_cfg_obj.c bsp/pm_cfg_obj.c'
+
+.PHONY: u-boot
+u-boot $(U_BOOT): $(DTS) bsp/ultra96v2_uboot_defconfig | build-sw
+	$(XIL_BASH) 'mkdir -p submodules/u-boot/board/xilinx/zynqmp/ultra96v2 \
+	&& cp $(DTS) submodules/u-boot/arch/arm/dts/ultra96v2.dts \
+	&& cp bsp/ultra96v2_uboot_defconfig submodules/u-boot/configs/ultra96v2_defconfig \
+	&& $(MAKE) -C submodules/u-boot ultra96v2_defconfig \
+	&& CROSS_COMPILE=aarch64-linux-gnu- $(MAKE) -j$$(nproc) -C submodules/u-boot \
+	&& cp submodules/u-boot/u-boot.elf $(U_BOOT)'
+
+.PHONY: linux
+linux $(LINUX): bsp/ultra96v2_linux_defconfig | build-sw
+	$(XIL_BASH) 'cp bsp/ultra96v2_linux_defconfig submodules/linux/arch/arm64/configs/ultra96v2_defconfig \
+	&& export CROSS_COMPILE=aarch64-linux-gnu- \
+	&& $(MAKE) ARCH=arm64 -C submodules/linux ultra96v2_defconfig \
+	&& $(MAKE) ARCH=arm64 -j$$(nproc) -C submodules/linux \
+	&& cp submodules/linux/arch/arm64/boot/Image $(LINUX)'
+
+.PHONY: bin
+bin $(BOOT_BIN): $(DTB) $(FSBL) $(PMUFW) $(ATF) $(U_BOOT) | build-sw
+	$(XIL_BASH) 'bootgen -arch zynqmp -image bsp/boot.bif -w -o $(BOOT_BIN)'
+
+.PHONY: fit
+fit $(FIT): $(LINUX) $(DTB) | build-sw
+	$(XIL_BASH) 'mkimage -f ./bsp/image.its ./build-sw/image.ub $(FIT)'
+
+.PHONY: rootfs
+rootfs $(ROOTFS): | build-sw
+	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes \
+	&& docker compose build rootfs \
+	&& docker export "$$(docker create --platform linux/arm64/v8 rootfs:latest)" -o ./build-sw/docker_rootfs.tar \
+	&& $(XIL_BASH) -c ' \
+	rm -rf ./build-sw/machine ./build-sw/rootfs.tar.gz ./build-sw/qemu.img \
+	&& qemu-img create -f raw ./build-sw/qemu.img 1G \
+	&& guestfish -f ./scripts/guestfish_rootfs.sh \
+	&& mkimage -A arm64 -C None -T script -d ./bsp/qemu_boot.script ./build-sw/qemu_boot.scr'
+
+
+.PHONY: rootfs-shell
+rootfs-shell:
+	docker compose run --rm rootfs bash -i
+
+.PHONY: qemu
+qemu: $(U_BOOT) $(FIT) $(ROOTFS) $(ATF) $(PMUFW)
+	$(XIL_BASH) './scripts/qemu.sh'
 
 #
 # target
@@ -167,70 +233,83 @@ hw-debug:
 
 .PHONY: boot
 boot:
-	$(XIL_BASH) 'xsdb scripts/boot.tcl'
+	$(XIL_BASH) 'xsdb -interactive scripts/boot.tcl'
 
 # SD card files to install
-INSTALL_FILES += build-sw/BOOT.BIN
+INSTALL_FILES := \
+	$(BOOT_BIN) \
+	$(FIT) \
+	bsp/extlinux
 
 .PHONY: sd
-sd:
-	$(DOCKER_RUN) ./scripts/sd_utils.sh all $(INSTALL_FILES)
+sd: |
+	./scripts/sd_utils.sh all $(INSTALL_FILES)
+
+.PHONY: sd-mount
+sd-mount: |
+	./scripts/sd_utils.sh mount
+
+.PHONY: sd-unmount
+sd-unmount: |
+	./scripts/sd_utils.sh unmount
+
+.PHONY: sd-eject
+sd-eject: |
+	./scripts/sd_utils.sh eject
+
+.PHONY: sd-partition
+sd-partition: |
+	./scripts/sd_utils.sh partition
 
 #
 # xinlinx installer
 #
 
-.PHONY: xil-extract
-xil-extract static/$(XIL_INSTALLER):
-	md5sum static/${XIL_INSTALLER_TAR} | grep ${XIL_INSTALLER_MD5} \
-	&& tar -I pigz -xvf static/$(XIL_INSTALLER_TAR) -C static
+.PHONY: xilinx-extract
+xilinx-extract docker/$(XIL_INSTALLER):
+	md5sum docker/$(XIL_INSTALLER_TAR) | grep $(XIL_INSTALLER_MD5) \
+	&& tar -I pigz -xvf docker/$(XIL_INSTALLER_TAR) -C docker
 
- .PHONY: vitis-install-config
-vitis-config: | static/$(XIL_INSTALLER)
-	static/$(XIL_INSTALLER)/xsetup -b ConfigGen -l /xilinx \
-	&& cp $$HOME/.Xilinx/install_config.txt docker/vitis_config.txt
-
- .PHONY: petalinux-install-config
-petalinux-install-config: | static/$(XIL_INSTALLER)
-	static/$(XIL_INSTALLER)/xsetup -b ConfigGen -l /xilinx \
-	&& cp $$HOME/.Xilinx/install_config.txt docker/petalinux_config.txt
-
-#
-# simulation
-#
-
-.PHONY: sim
-sim: $(SIM_EXEC)
-	$(DOCKER_RUN) $(SIM_EXEC)
-
-.PHONY: waves
-waves:
-	$(DOCKER_RUN) gtkwave waves.fst
-
-.PHOHNY: xsim
-xsim:
-	$(XIL_BASH) 'cd build-hw/sim/xsim && ./tb.sh'
-
-.PHOHNY: xsim-build
-xsim-build $(XSIM_EXEC): $(BD) $(SIM_SRCS) $(SYNTH_SRCS)
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source vivado/xsim.tcl -tclargs $(PART) $(BOARD_PART) $(SIM_SRCS) $(SYNTH_SRCS)'
-
-.PHOHNY: xsim-clean
-xsim-clean:
-	$(XIL_BASH) 'cd build-hw/sim/xsim && ./tb.sh -reset_run'
-
-.PHONY: xsim-waves
-xsim-waves:
-	$(DOCKER_RUN) gtkwave build-hw/sim/xsim/waves.vcd
+.PHONY: xilinx-config
+xilinx-config: | docker/$(XIL_INSTALLER)
+	docker/$(XIL_INSTALLER) --target ./docker/xilinx -- -b ConfigGen -l /xilinx \
+	&& cp $$HOME/.Xilinx/install_config.txt ./docker/vivado_config.txt
 
 #
 # misc
 #
 
+.PHONY: cleanout
+cleanout:
+	rm -rf $(LINUX) \
+		build-sw/*.bin \
+		build-sw/*.elf \
+		build-sw/*.ub \
+		build-sw/*.dts \
+		build-sw/*.dtb
+
+
 .PHONY: cleanall
-cleanall: petalinux-clean
-	rm -rf static/$(XIL_INSTALLER) \
-		build* \
+cleanall: cleansw cleanhw
+	rm -rf verible.filelist
+
+.PHONY: cleansw
+cleansw:
+	$(XIL_BASH) 'rm -rf build-sw \
+		submodules/u-boot/arch/arm/dts/ultra96v2.dts \
+		submodules/u-boot/configs/ultra96v2_defconfig \
+		submodules/u-boot/board/xilinx/zynqmp/ultra96v2 \
+		submodules/linux/arch/arm64/configs/ultra96v2_defconfig \
+	&& git -C submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw checkout -- . \
+	&& $(MAKE) -C submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/src clean \
+	&& $(MAKE) PLAT=zynqmp -C submodules/arm-trusted-firmware clean \
+	&& $(MAKE) -C submodules/u-boot distclean \
+	&& $(MAKE) -C submodules/linux distclean \
+	&& $(MAKE) -C submodules/qemu-devicetrees clean'
+
+.PHONY: cleanhw
+cleanhw:
+	rm -rf build-hw \
 		*.log \
 		*.jou \
 		.Xil \
@@ -239,8 +318,7 @@ cleanall: petalinux-clean
 		*.fst \
 		*.hier \
 		*.str \
-		*.pb \
-		tight_setup_hold_pins.txt
+		*.pb
 
-build-hw build-sw build-sim build-linux:
+build-hw build-sw build-sw/mount:
 	mkdir -p $@

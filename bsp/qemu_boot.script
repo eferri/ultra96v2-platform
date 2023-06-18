@@ -1,0 +1,2 @@
+setenv bootargs "earlycon console=ttyPS0,115200 clk_ignore_unused root=/dev/mmcblk0p1 rw rootwait cma=512M rfkill.default_state=1"
+bootm 0x10000000

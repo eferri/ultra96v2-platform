@@ -1,6 +1,15 @@
 build*
-static/*
-!static/.gitkeep
+
+!build-yocto
+!build-yocto/conf
+!build-yocto/conf/bblayers.conf
+!build-yocto/conf/local.conf
+!build-yocto/conf/templateconf.cfg
+
+
+docker/xilinx*
+docker/Xilinx*
+
 .Xil
 
 *.jou
@@ -17,3 +26,5 @@ static/*
 
 .ip_user_files
 tight_setup_hold_pins.txt
+
+verible.filelist

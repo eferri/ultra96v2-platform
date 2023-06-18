@@ -1,0 +1,18 @@
+[submodule "submodules/linux-xlnx"]
+	path = submodules/linux
+	url = https://github.com/Xilinx/linux-xlnx.git
+[submodule "submodules/u-boot-xlnx"]
+	path = submodules/u-boot
+	url = https://github.com/Xilinx/u-boot-xlnx.git
+[submodule "submodules/arm-trusted-firmware"]
+	path = submodules/arm-trusted-firmware
+	url = https://github.com/Xilinx/arm-trusted-firmware.git
+[submodule "submodules/embeddedsw"]
+	path = submodules/embeddedsw
+	url = https://github.com/Xilinx/embeddedsw.git
+[submodule "submodules/device-tree-xlnx"]
+	path = submodules/device-tree-xlnx
+	url = https://github.com/Xilinx/device-tree-xlnx
+[submodule "submodules/qemu-devicetrees"]
+	path = submodules/qemu-devicetrees
+	url = git@github.com:Xilinx/qemu-devicetrees.git

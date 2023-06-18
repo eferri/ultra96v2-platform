@@ -1,9 +1,7 @@
 
 module top (
     output logic led_1,
-    output logic led_2,
-    output logic uart_tx,
-    input  logic uart_rx
+    output logic led_2
 );
   logic clk;
   logic reset;
@@ -19,7 +17,6 @@ module top (
       .o_led  (led_1)
   );
 
-  assign led_2   = 1'b1;
-  assign uart_tx = uart_rx;
+  assign led_2 = 1'b1;
 
 endmodule
