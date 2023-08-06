@@ -858,8 +858,6 @@
 			#clock-cells = <1>;
 			clock-output-names = "clk_out_sd0", "clk_in_sd0";
 			resets = <&zynqmp_reset ZYNQMP_RESET_SDIO0>;
-			no-1-8-v;
-			disable-wp;
 		};
 
 		sdhci1: mmc@ff170000 {

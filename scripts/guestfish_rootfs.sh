@@ -10,7 +10,6 @@ mount /dev/sda1 /
 
 tar-in ./build-sw/docker_rootfs.tar /
 rm /.dockerenv
-upload ./rootfs/netplan.yml /etc/netplan/99_config.yaml
 upload ./rootfs/hosts /etc/hosts
 upload ./rootfs/hostname /etc/hostname
 

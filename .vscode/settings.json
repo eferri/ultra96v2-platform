@@ -12,6 +12,7 @@
     "search.exclude": {
         "submodules": true
     },
+    "verilog.ctags.path": "ctags",
     "verilog.formatting.veribleVerilogFormatter.path": "verible-verilog-format",
     "verilog.languageServer.veribleVerilogLs.enabled": true,
     "verilog.languageServer.veribleVerilogLs.path": "verible-verilog-ls",

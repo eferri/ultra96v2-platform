@@ -37,13 +37,13 @@ after 1000
 dow -data "build-sw/system.dtb" 0x100000
 after 100
 
-# dow "build-sw/u-boot.elf"
-# after 100
+dow "build-sw/u-boot.elf"
+after 100
 
 dow "build-sw/bl31.elf"
 after 100
 
-# dow -data  "build-sw/image.ub" 0x10000000
+dow -data  "build-sw/image.ub" 0x10000000
 
 con
 

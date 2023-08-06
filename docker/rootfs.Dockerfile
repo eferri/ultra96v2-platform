@@ -1,4 +1,4 @@
-FROM ubuntu:lunar-20230615 as rootfs
+FROM ubuntu:lunar-20230816 as rootfs
 
 RUN yes | unminimize
 
@@ -10,6 +10,7 @@ RUN apt-get update \
     netbase \
     sudo \
     systemd-resolved \
+    systemd-timesyncd \
     udev \
     fpga-manager-xlnx \
     usbutils \

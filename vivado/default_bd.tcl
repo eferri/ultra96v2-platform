@@ -1,18 +1,12 @@
 
-if {![info exists part] } {
-    puts "set \"part\" before sourcing script\n"
-    exit 1
-}
-
 set ws_dir [file dirname [info script]]
 
-set_part $part
 set_property TARGET_LANGUAGE Verilog [current_project]
 
 # Create block design
 file delete -force build-hw/bd
 create_bd_design -dir build-hw/bd zynqmp
-set bd_file build-hw/bd/zynqmp/zynqmp.bd
+set bd_out_file build-hw/bd/zynqmp/zynqmp.bd
 
 # Blocks
 create_bd_cell -type ip -vlnv xilinx.com:ip:zynq_ultra_ps_e:3.5 zynqmp
@@ -37,13 +31,3 @@ create_bd_port -dir O clk
 
 connect_bd_net [get_bd_ports clk] [get_bd_pins zynqmp/pl_clk0]
 connect_bd_net [get_bd_ports reset] [get_bd_pins zynqmp/pl_resetn0]
-
-validate_bd_design
-save_bd_design zynqmp
-
-generate_target all [get_files $bd_file]
-
-close_bd_design zynqmp
-
-write_hw_platform -fixed -force build-hw/zynqmp.xsa
-validate_hw_platform build-hw/zynqmp.xsa

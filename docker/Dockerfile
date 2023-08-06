@@ -1,4 +1,4 @@
-FROM ubuntu:jammy-20230624 as xil
+FROM ubuntu:jammy-20230816 as xil
 
 ARG XIL_VERSION
 ARG XIL_INSTALLER
@@ -83,10 +83,13 @@ RUN curl -sS https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.g
     device-tree-compiler \
     libudev-dev \
     pkg-config \
+    cmake \
+    clang-15 \
     clang-tools-15 \
+    clang-format-15 \
+    clang-tidy-15 \
     gcc-12 \
     g++-12 \
-    clang-15 \
     u-boot-tools \
     less \
     libguestfs-tools \
@@ -124,14 +127,19 @@ RUN curl -sS https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.g
     libssl-dev \
     uuid-dev \
     libgnutls28-dev \
-    && chmod 0644 /boot/vmlinuz*
+    && chmod 0644 /boot/vmlinuz* \
+    && ln -s /usr/bin/clang-format-15 /usr/bin/clang-format \
+    && ln -s /usr/bin/clang-tidy-15 /usr/bin/clang-tidy
 
 USER xil
+
+ENV CC=gcc-12
+ENV CXX=g++-12
 
 # Install verilator
 RUN git clone https://github.com/verilator/verilator \
     && cd verilator \
-    && git checkout v5.012 \
+    && git checkout v5.016 \
     && autoconf \
     && ./configure --prefix=/tools/verilator \
     && make -j$(nproc) \
@@ -143,7 +151,7 @@ RUN git clone https://github.com/verilator/verilator \
 # Install verible
 RUN git clone https://github.com/chipsalliance/verible.git \
     && cd verible \
-    && git checkout v0.0-3401-g0b8cb4e0 \
+    && git checkout v0.0-3416-g470e0b95 \
     && mkdir -p /tools/verible/bin \
     && bazel run -c opt :install -- /tools/verible/bin \
     && bazel test -c opt //... \
@@ -176,6 +184,5 @@ ENV PATH="$PATH:/tools/qemu/bin"
 ENV TERMINFO=/lib/terminfo
 ENV NO_AT_BRIDGE=1
 
-# Cleanup, automatically source xilinx tools
-RUN rm -rf /build/* \
-    && echo ". ${XIL_VITIS}/settings64.sh" >> /home/xil/.bashrc
+# Cleanup
+RUN rm -rf /build/*

@@ -4,5 +4,5 @@ network:
     eth0:
       dhcp4: true
       match:
-        name: "*"
+        name: "e*"
       set-name: eth0
