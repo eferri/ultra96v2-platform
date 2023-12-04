@@ -1,4 +1,4 @@
-FROM ubuntu:jammy-20230816 as xil
+FROM ubuntu:jammy-20240405 as xil
 
 ARG XIL_VERSION
 ARG XIL_INSTALLER
@@ -112,7 +112,7 @@ RUN curl -sS https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.g
     # Verible build requirements
     apt-transport-https \
     zip \
-    bazel \
+    bazel-6.5.0 \
     # qemu build requirements
     ninja-build \
     libglib2.0-dev \
@@ -139,7 +139,7 @@ ENV CXX=g++-12
 # Install verilator
 RUN git clone https://github.com/verilator/verilator \
     && cd verilator \
-    && git checkout v5.016 \
+    && git checkout v5.024 \
     && autoconf \
     && ./configure --prefix=/tools/verilator \
     && make -j$(nproc) \
@@ -151,17 +151,18 @@ RUN git clone https://github.com/verilator/verilator \
 # Install verible
 RUN git clone https://github.com/chipsalliance/verible.git \
     && cd verible \
-    && git checkout v0.0-3416-g470e0b95 \
+    && git checkout v0.0-3640-gec69caeb \
     && mkdir -p /tools/verible/bin \
-    && bazel run -c opt :install -- /tools/verible/bin \
-    && bazel test -c opt //... \
+    && bazel-6.5.0 run -c opt :install -- /tools/verible/bin \
+    && bazel-6.5.0 test -c opt //... \
     && cd ../ \
     && rm -rf ./verible
 
 # Install qemu
 RUN git clone https://github.com/Xilinx/qemu.git \
     && cd qemu \
-    && git checkout xlnx_rel_v2023.1 \
+    && git checkout xlnx_rel_v${XIL_VERSION} \
+    && git submodule update --init dtc \
     && mkdir build \
     && cd build \
     && ../configure --prefix=/tools/qemu --target-list="aarch64-softmmu,microblazeel-softmmu" \

@@ -10,7 +10,8 @@
                 "shardulm94.trailing-spaces",
                 "eugenwiens.bitbake",
                 "mshr-h.VerilogHDL",
-                "plorefice.devicetree"
+                "plorefice.devicetree",
+                "chipsalliance.verible"
             ]
         }
     },

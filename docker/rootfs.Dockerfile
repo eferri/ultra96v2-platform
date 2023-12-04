@@ -1,4 +1,4 @@
-FROM ubuntu:lunar-20230816 as rootfs
+FROM ubuntu:noble-20240423 as rootfs
 
 RUN yes | unminimize
 

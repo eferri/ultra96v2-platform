@@ -6,7 +6,7 @@
 	images {
 		kernel-0 {
 			description = "Linux Kernel";
-			data = /incbin/("../build-sw/Image");
+			data = /incbin/("/app/build-sw/Image");
 			type = "kernel";
 			arch = "arm64";
 			os = "linux";
@@ -19,7 +19,7 @@
 		};
 		fdt-0 {
 			description = "Flattened Device Tree blob";
-			data = /incbin/("../build-sw/system.dtb");
+			data = /incbin/("/app/build-sw/system.dtb");
 			type = "flat_dt";
 			arch = "arm64";
 			compression = "none";

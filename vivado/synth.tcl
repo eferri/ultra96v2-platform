@@ -6,15 +6,17 @@ if { $argc < 2 } {
 set part [lindex $argv 0]
 set srcs [lrange $argv 1 end]
 
+set ws_dir [file dirname [info script]]
+
 # Vivado will lock BD IP if part isnt't set
 set_part $part
 
 read_bd build-hw/bd/zynqmp/zynqmp.bd
 
 read_verilog -sv $srcs
-read_xdc vivado/constraints.xdc
+read_xdc $ws_dir/constraints.xdc
 
-set_msg_config -suppress -severity WARNING -string "zynq_ultra_ps_e_v3_5_0"
+set_msg_config -suppress -severity WARNING -string "zynq_ultra_ps_e_v3_5_1"
 set_msg_config -suppress -severity WARNING -id "Synth 8-3295"
 
 synth_design -name zynqmp -top top -part $part

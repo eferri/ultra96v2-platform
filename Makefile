@@ -1,4 +1,4 @@
-PFM_DIR ?= .
+export PFM_DIR ?= .
 
 PART ?= xczu3eg-sbva484-1-e
 
@@ -10,16 +10,17 @@ UID ?= 1000
 GID ?= 1000
 KVM_GID ?= 200
 
-XIL_VERSION := 2023.1
-XIL_INSTALLER := Xilinx_Unified_$(XIL_VERSION)_0507_1903
+export XIL_VERSION := 2023.2
+
+XIL_INSTALLER := FPGAs_AdaptiveSoCs_Unified_$(XIL_VERSION)_1013_2256
 XIL_INSTALLER_TAR := $(XIL_INSTALLER).tar.gz
-XIL_INSTALLER_MD5 := f2011ceba52b109e3551c1d3189a8c9c
+XIL_INSTALLER_MD5 :=  64d64e9b937b6fd5e98b41811c74aab2
 
 BD_SRC ?= $(PFM_DIR)/vivado/default_bd.tcl
 
 RTL_SRCS ?= \
-	src/rtl/top.sv \
-	src/rtl/flash.sv
+	$(PFM_DIR)/src/rtl/top.sv \
+	$(PFM_DIR)/src/rtl/flash.sv
 
 SYNTH_SRCS ?= $(RTL_SRCS)
 
@@ -53,7 +54,7 @@ BD := build-hw/bd/zynqmp/zynqmp.bd
 
 
 .PHONY: all
-all: $(BOOT_BIN) $(FIT) $(ROOTFS)
+all: $(BIT) $(BOOT_BIN) $(FIT) $(ROOTFS)
 
 #
 # docker
@@ -72,6 +73,10 @@ XIL_BASH := $(DOCKER_RUN) bash --rcfile /xilinx/Vitis/$(XIL_VERSION)/settings64.
 .PHONY: shell
 shell:
 	$(DOCKER_RUN) bash -i
+
+.PHONY: xil-shell
+xil-shell:
+	$(DOCKER_RUN) bash --rcfile /xilinx/Vitis/$(XIL_VERSION)/settings64.sh -i
 
 .PHONY: root-shell
 root-shell:
@@ -112,35 +117,12 @@ build-sim/$(call SRC_HASH,SINGLE_LINE_SRCS): | build-sim
 # simulation
 #
 
-SIM_SRCS ?= \
-	src/sim/tb.cpp
-
-TOP ?= top
-SIM_TOP := build-sim/V$(TOP)
-
 SIM_EXE := build-sim/tb
-
-VERILATOR_ARGS ?= \
-	-O3 \
-	-Wall \
-	--verilate-jobs 0 \
-	--threads $$(nproc) \
-	--threads-dpi all \
-	--timing \
-	--trace-fst \
-	--trace-threads 2 \
-	--timescale 1ns/1ns \
-	--top $(TOP) \
-	--clk top.zynqmp.clk
 
 .PHONY: sim
 sim $(SIM_EXE): $(SIM_SRCS) | build-sim
 	$(DOCKER_BASH) 'cd build-sim \
-	&& cmake ../'
-
-.PHONY: verilate
-verilate $(SIM_TOP): verible.filelist | build-sim
-	$(DOCKER_BASH) 'verilator $(VERILATOR_ARGS) --cc -Mdir ./build-sim $-f verible.filelist'
+	&& cmake ..'
 
 .PHONY: waves
 waves:
@@ -162,11 +144,11 @@ impl bit $(IMPL) $(BIT): $(SYNTH) $(PFM_DIR)/vivado/bitstream.tcl | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/bitstream.tcl'
 
 .PHONY: synth
-synth $(SYNTH): $(PFM_DIR)/vivado/synth.tcl $(BD) $(PFM_DIR)/vivado/constraints.xdc $(SYNTH_SRCS) | build-hw
+synth $(SYNTH): $(BD) $(SYNTH_SRCS) $(PFM_DIR)/vivado/constraints.xdc $(PFM_DIR)/vivado/synth.tcl | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/synth.tcl -tclargs $(PART) $(SYNTH_SRCS)'
 
 .PHONY: bd xsa
-bd xsa $(BD) $(XSA): $(PFM_DIR)/vivado/write_bd.tcl $(PFM_DIR)/vivado/default_bd.tcl $(PFM_DIR)/vivado/zynqmp_preset.tcl | build-hw
+bd xsa $(BD) $(XSA): $(PFM_DIR)/vivado/write_bd.tcl $(BD_SRC) $(PFM_DIR)/vivado/zynqmp_preset.tcl | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/write_bd.tcl -tclargs $(PART) $(BD_SRC)'
 
 # Interactive commands
@@ -180,7 +162,7 @@ vivado-gui:
 
 .PHONY: edit-bd
 edit-bd: | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode tcl -source $(PFM_DIR)/vivado/edit_bd.tcl -tclargs $(PART)'
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode tcl -source $(PFM_DIR)/vivado/edit_bd.tcl -tclargs $(PART) $(BD_SRC)'
 
 
 #
@@ -193,7 +175,7 @@ DTS_SRCS := \
 	$(PFM_DIR)/device-tree/zynqmp-clk-ccf.dtsi \
 	$(PFM_DIR)/device-tree/zynqmp.dtsi
 
-# Generate dts and pm_cfg_obj from xsct
+# Generate dts from xsct
 
 .PHONY: dts-gen
 dts-gen: $(XSA) $(PFM_DIR)/scripts/dts.tcl
@@ -225,10 +207,9 @@ atf $(ATF): | build-sw
 .PHONY: fsbl
 fsbl $(FSBL): $(XSA) | build-sw
 	$(XIL_BASH) 'xsct $(PFM_DIR)/scripts/fsbl.tcl \
-	&& sed -i "s/_BASEADDRESS 0xFF000000/_BASEADDRESS 0xFF010000/g" $(PFM_DIR)/build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/include/xparameters.h \
+	&& sed -i "s/_BASEADDRESS 0xFF000000/_BASEADDRESS 0xFF010000/g" build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/include/xparameters.h \
 	&& $(MAKE) -C build-sw/fsbl \
-	&& cp build-sw/fsbl/executable.elf $(FSBL) \
-	&& cp build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/libsrc/xilpm_v5_0/src/pm_cfg_obj.c $(PFM_DIR)/bsp/pm_cfg_obj.c'
+	&& cp build-sw/fsbl/executable.elf $(FSBL)'
 
 .PHONY: u-boot
 u-boot $(U_BOOT): $(DTS) $(PFM_DIR)/bsp/ultra96v2_uboot_defconfig | build-sw
@@ -258,7 +239,7 @@ fit $(FIT): $(LINUX) $(DTB) | build-sw
 .PHONY: rootfs
 rootfs $(ROOTFS): | build-sw
 	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes \
-	&& $(DOCKER_COMPOSE) build rootfs \
+	&& docker compose -f $(PFM_DIR)/docker-compose.yml --project-directory $(PFM_DIR) build rootfs \
 	&& docker export "$$(docker create --platform linux/arm64/v8 rootfs:latest)" -o ./build-sw/docker_rootfs.tar \
 	&& $(XIL_BASH) -c ' \
 	rm -rf ./build-sw/machine $(ROOTFS) ./build-sw/qemu.img \
@@ -318,13 +299,13 @@ sd-partition: |
 #
 
 .PHONY: xilinx-extract
-xilinx-extract docker/$(XIL_INSTALLER):
+xilinx-extract $(PFM_DIR)/docker/$(XIL_INSTALLER):
 	md5sum $(PFM_DIR)/docker/$(XIL_INSTALLER_TAR) | grep $(XIL_INSTALLER_MD5) \
-	&& tar -I pigz -xvf $(PFM_DIR)/docker/$(XIL_INSTALLER_TAR) -C docker
+	&& tar -I pigz -xvf $(PFM_DIR)/docker/$(XIL_INSTALLER_TAR) -C $(PFM_DIR)/docker
 
 .PHONY: xilinx-config
-xilinx-config: | docker/$(XIL_INSTALLER)
-	$(PFM_DIR)/docker/$(XIL_INSTALLER) --target $(PFM_DIR)/docker/xilinx -- -b ConfigGen -l /xilinx \
+xilinx-config: | $(PFM_DIR)/docker/$(XIL_INSTALLER)
+	$(PFM_DIR)/docker/$(XIL_INSTALLER)/xsetup -b ConfigGen -l /xilinx \
 	&& cp $$HOME/.Xilinx/install_config.txt $(PFM_DIR)/docker/xilinx_config.txt
 
 #
@@ -374,7 +355,8 @@ cleanhw:
 		*.fst \
 		*.hier \
 		*.str \
-		*.pb
+		*.pb \
+		clockInfo.txt
 
 build-hw build-sw build-sw/mount build-sim:
 	mkdir -p $@

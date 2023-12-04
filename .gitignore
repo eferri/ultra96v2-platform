@@ -1,14 +1,8 @@
 build*
 
-!build-yocto
-!build-yocto/conf
-!build-yocto/conf/bblayers.conf
-!build-yocto/conf/local.conf
-!build-yocto/conf/templateconf.cfg
-
-
 docker/xilinx*
 docker/Xilinx*
+docker/FPGAs*
 
 .Xil
 
@@ -23,6 +17,8 @@ docker/Xilinx*
 *.hier
 
 *.pb
+
+clockInfo.txt
 
 .ip_user_files
 tight_setup_hold_pins.txt

@@ -10,8 +10,9 @@ mount /dev/sda1 /
 
 tar-in ./build-sw/docker_rootfs.tar /
 rm /.dockerenv
-upload ./rootfs/hosts /etc/hosts
-upload ./rootfs/hostname /etc/hostname
+
+<! echo "upload $PFM_DIR/rootfs/hosts /etc/hosts"
+<! echo "upload $PFM_DIR/rootfs/hostname /etc/hostname"
 
 rm /etc/resolv.conf
 

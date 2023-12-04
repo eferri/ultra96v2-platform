@@ -10,27 +10,20 @@ ROOTFS="$DIR/build-sw/mount_rootfs"
 
 PLATFORM="ultra96v2"
 
-function eject_sd {
+function unmount_sd {
     echo "Syncing..."
     sync
 
     echo "Unmounting..."
     sudo umount "$BOOTFS" || true
-
-    echo "Unmounting..."
     sudo umount "$ROOTFS" || true
+}
+
+function eject_sd {
+    unmount_sd
 
     echo "Ejecting..."
     sudo eject ${SDDEV}
-}
-
-
-function unmount_sd {
-    echo "Unmounting..."
-    sync
-
-    sudo umount "$BOOTFS"
-    sudo umount "$ROOTFS"
 }
 
 function mount_sd {
