@@ -1,17 +1,14 @@
-FROM ubuntu:noble-20240423 as rootfs
+FROM ubuntu:noble-20240605 as rootfs
 
 RUN yes | unminimize
 
 RUN apt-get update \
     && DEBIAN_FRONTEND='noninteractive' apt-get upgrade \
-    && DEBIAN_FRONTEND='noninteractive' apt-get install --no-install-recommends -y ubuntu-minimal \
-    apt \
+    && DEBIAN_FRONTEND='noninteractive' apt-get install --no-install-recommends -y \
+    ubuntu-minimal \
     dbus \
-    netbase \
-    sudo \
     systemd-resolved \
     systemd-timesyncd \
-    udev \
     fpga-manager-xlnx \
     usbutils \
     lshw

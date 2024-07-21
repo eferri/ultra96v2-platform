@@ -1,30 +1,24 @@
-export PFM_DIR ?= .
-
-PART ?= xczu3eg-sbva484-1-e
-
 #
 # inputs
 #
+
+export PFM_DIR ?= .
 
 UID ?= 1000
 GID ?= 1000
 KVM_GID ?= 200
 
-export XIL_VERSION := 2023.2
-
-XIL_INSTALLER := FPGAs_AdaptiveSoCs_Unified_$(XIL_VERSION)_1013_2256
-XIL_INSTALLER_TAR := $(XIL_INSTALLER).tar.gz
-XIL_INSTALLER_MD5 :=  64d64e9b937b6fd5e98b41811c74aab2
-
+SD_DEV ?= sda
 BD_SRC ?= $(PFM_DIR)/vivado/default_bd.tcl
+RTL_SRCS ?= $(shell cat $(PFM_DIR)/src/rtl.f | sed -e 's/^/$(PFM_DIR)\/src\//; s/\n/ /')
+SYNTH_SRCS ?= $(filter-out rtl/zynqmp.sv, $(RTL_SRCS))
+PART ?= xczu3eg-sbva484-1-e
 
-RTL_SRCS ?= \
-	$(PFM_DIR)/src/rtl/top.sv \
-	$(PFM_DIR)/src/rtl/flash.sv
+export XIL_VERSION := 2024.1
 
-SYNTH_SRCS ?= $(RTL_SRCS)
-
-ALL_SRCS := $(RTL_SRCS)
+XIL_INSTALLER := FPGAs_AdaptiveSoCs_Unified_$(XIL_VERSION)_0522_2023
+XIL_INSTALLER_TAR := $(XIL_INSTALLER).tar.gz
+XIL_INSTALLER_MD5 := 372c0b184e32001137424e395823de3c
 
 #
 # outputs
@@ -98,31 +92,15 @@ docker-image: $(XILINX_TOKEN)
 	&& docker compose -f $(PFM_DIR)/docker-compose.yml down
 
 #
-# Generate filelist for verible tools
-#
-
-SINGLE_LINE_SRCS := $(patsubst %,%,$(ALL_SRCS))
-
-SRC_HASH = SRCS_$(shell echo '$($(1))' | md5sum | awk '{print $$1}')
-
-verible.filelist: build-sim/$(call SRC_HASH,SINGLE_LINE_SRCS)
-	rm -f $@
-	echo $(SINGLE_LINE_SRCS) | sed 's/ /\n/g' > $@
-
-build-sim/$(call SRC_HASH,SINGLE_LINE_SRCS): | build-sim
-	rm -rf build-sw/SRCS*
-	touch $@
-
-#
 # simulation
 #
 
 SIM_EXE := build-sim/tb
 
 .PHONY: sim
-sim $(SIM_EXE): $(SIM_SRCS) | build-sim
-	$(DOCKER_BASH) 'cd build-sim \
-	&& cmake ..'
+sim $(SIM_EXE):
+	$(DOCKER_BASH) 'cmake --preset=dev \
+	&& cmake --build --preset=dev'
 
 .PHONY: waves
 waves:
@@ -130,8 +108,10 @@ waves:
 
 .PHONY: lint
 lint:
-	$(DOCKER_BASH) 'verible-verilog-lint --ruleset all $(RTL_SRCS) \
-	&& clang-tidy-15 $(SIM_SRCS)'
+	$(DOCKER_BASH) 'cmake --preset=dev \
+	&& shopt -s globstar \
+	&& clang-tidy -p build-sim/dev src/**/*.cpp  \
+	&& verible-verilog-lint --ruleset all $(RTL_SRCS)'
 
 #
 # vivado
@@ -185,10 +165,7 @@ dts-gen: $(XSA) $(PFM_DIR)/scripts/dts.tcl
 dtb $(DTB) $(DTS): $(DTS_SRCS) | build-sw
 	$(XIL_BASH) 'gcc -I device-tree -I $(PFM_DIR)/submodules/linux -E -nostdinc -undef \
 					 -D__DTS__ -x assembler-with-cpp -o $(DTS) $(PFM_DIR)/device-tree/system-top.dts \
-	&& dtc -I dts -O dtb -o $(DTB) $(DTS) \
-	&& make -C $(PFM_DIR)/submodules/qemu-devicetrees \
-	&& cp $(PFM_DIR)/submodules/qemu-devicetrees/LATEST/MULTI_ARCH/board-zynqmp-zcu102.dtb build-sw/qemu_system.dtb \
-	&& cp $(PFM_DIR)/submodules/qemu-devicetrees/LATEST/MULTI_ARCH/zynqmp-pmu.dtb build-sw/qemu_pmu.dtb'
+	&& dtc -I dts -O dtb -o $(DTB) $(DTS)'
 
 .PHONY: pmufw
 pmufw $(PMUFW): | build-sw
@@ -229,7 +206,7 @@ linux $(LINUX): $(PFM_DIR)/bsp/ultra96v2_linux_defconfig | build-sw
 	&& cp $(PFM_DIR)/submodules/linux/arch/arm64/boot/Image $(LINUX)'
 
 .PHONY: bin
-bin $(BOOT_BIN): $(DTB) $(FSBL) $(PMUFW) $(ATF) $(U_BOOT) | build-sw
+bin $(BOOT_BIN): $(DTB) $(FSBL) $(PMUFW) $(ATF) $(U_BOOT) $(PFM_DIR)/bsp/boot.bif | build-sw
 	$(XIL_BASH) 'bootgen -arch zynqmp -image $(PFM_DIR)/bsp/boot.bif -w -o $(BOOT_BIN)'
 
 .PHONY: fit
@@ -239,7 +216,7 @@ fit $(FIT): $(LINUX) $(DTB) | build-sw
 .PHONY: rootfs
 rootfs $(ROOTFS): | build-sw
 	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes \
-	&& docker compose -f $(PFM_DIR)/docker-compose.yml --project-directory $(PFM_DIR) build rootfs \
+	&& docker compose -f $(PFM_DIR)/docker-compose.yml --progress=plain --project-directory $(PFM_DIR) build rootfs \
 	&& docker export "$$(docker create --platform linux/arm64/v8 rootfs:latest)" -o ./build-sw/docker_rootfs.tar \
 	&& $(XIL_BASH) -c ' \
 	rm -rf ./build-sw/machine $(ROOTFS) ./build-sw/qemu.img \
@@ -247,14 +224,9 @@ rootfs $(ROOTFS): | build-sw
 	&& guestfish -f $(PFM_DIR)/scripts/guestfish_rootfs.sh \
 	&& mkimage -A arm64 -C None -T script -d $(PFM_DIR)/bsp/qemu_boot.script ./build-sw/qemu_boot.scr'
 
-
 .PHONY: rootfs-shell
 rootfs-shell:
 	$(DOCKER_COMPOSE) run --rm rootfs bash -i
-
-.PHONY: qemu
-qemu: $(U_BOOT) $(FIT) $(ROOTFS) $(ATF) $(PMUFW)
-	$(XIL_BASH) '$(PFM_DIR)/scripts/qemu.sh'
 
 #
 # target
@@ -276,23 +248,23 @@ INSTALL_FILES := \
 
 .PHONY: sd
 sd: |
-	$(PFM_DIR)/scripts/sd_utils.sh all $(INSTALL_FILES)
+	$(PFM_DIR)/scripts/sd_utils.sh $(SD_DEV) all $(INSTALL_FILES)
 
 .PHONY: sd-mount
 sd-mount: |
-	$(PFM_DIR)/scripts/sd_utils.sh mount
+	$(PFM_DIR)/scripts/sd_utils.sh $(SD_DEV) mount
 
 .PHONY: sd-unmount
 sd-unmount: |
-	$(PFM_DIR)/scripts/sd_utils.sh unmount
+	$(PFM_DIR)/scripts/sd_utils.sh $(SD_DEV) unmount
 
 .PHONY: sd-eject
 sd-eject: |
-	$(PFM_DIR)/scripts/sd_utils.sh eject
+	$(PFM_DIR)/scripts/sd_utils.sh $(SD_DEV) eject
 
 .PHONY: sd-partition
 sd-partition: |
-	$(PFM_DIR)/scripts/sd_utils.sh partition
+	$(PFM_DIR)/scripts/sd_utils.sh $(SD_DEV) partition
 
 #
 # xinlinx installer
@@ -341,8 +313,7 @@ cleanallsw:
 	&& $(MAKE) -C $(PFM_DIR)/submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/src clean \
 	&& $(MAKE) PLAT=zynqmp -C $(PFM_DIR)/submodules/arm-trusted-firmware clean \
 	&& $(MAKE) -C $(PFM_DIR)/submodules/u-boot distclean \
-	&& $(MAKE) -C $(PFM_DIR)/submodules/linux distclean \
-	&& $(MAKE) -C $(PFM_DIR)/submodules/qemu-devicetrees clean'
+	&& $(MAKE) -C $(PFM_DIR)/submodules/linux distclean'
 
 .PHONY: cleanhw
 cleanhw:

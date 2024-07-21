@@ -1,4 +1,4 @@
-FROM ubuntu:jammy-20240405 as xil
+FROM ubuntu:jammy-20240627.1 as xil
 
 ARG XIL_VERSION
 ARG XIL_INSTALLER
@@ -68,32 +68,17 @@ RUN bash -c 'curl http://localhost:8080/${XIL_INSTALLER_TAR} | tee >(md5sum > ${
 
 USER root
 
-# Development tool dependencies
-RUN curl -sS https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.gpg \
-    && mv bazel.gpg /etc/apt/trusted.gpg.d/ \
-    && echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" \
-    | tee /etc/apt/sources.list.d/bazel.list && apt-get update \
+# Build dependencies
+RUN curl -sS https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > /etc/apt/trusted.gpg.d/bazel.gpg \
+    && echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" > /etc/apt/sources.list.d/bazel.list \
+    && apt-add-repository ppa:ubuntu-toolchain-r/test \
     && apt-get update \
     && DEBIAN_FRONTEND='noninteractive' apt-get install --no-install-recommends -y \
     git \
-    vim \
     build-essential \
-    universal-ctags \
-    gtkwave \
-    device-tree-compiler \
-    libudev-dev \
     pkg-config \
-    cmake \
-    clang-15 \
-    clang-tools-15 \
-    clang-format-15 \
-    clang-tidy-15 \
-    gcc-12 \
-    g++-12 \
-    u-boot-tools \
-    less \
-    libguestfs-tools \
-    linux-image-kvm \
+    gcc-13 \
+    g++-13 \
     # Verilator build requirements
     help2man \
     perl \
@@ -113,33 +98,18 @@ RUN curl -sS https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.g
     apt-transport-https \
     zip \
     bazel-6.5.0 \
-    # qemu build requirements
-    ninja-build \
-    libglib2.0-dev \
-    libgcrypt20-dev \
-    zlib1g-dev \
-    automake \
-    libtool \
-    libpixman-1-dev \
-    libcapstone-dev \
     # u-boot build requirements
     bc \
     libssl-dev \
     uuid-dev \
-    libgnutls28-dev \
-    && chmod 0644 /boot/vmlinuz* \
-    && ln -s /usr/bin/clang-format-15 /usr/bin/clang-format \
-    && ln -s /usr/bin/clang-tidy-15 /usr/bin/clang-tidy
+    libgnutls28-dev
 
 USER xil
 
-ENV CC=gcc-12
-ENV CXX=g++-12
-
-# Install verilator
+# Build, test and install verilator
 RUN git clone https://github.com/verilator/verilator \
     && cd verilator \
-    && git checkout v5.024 \
+    && git checkout v5.026 \
     && autoconf \
     && ./configure --prefix=/tools/verilator \
     && make -j$(nproc) \
@@ -148,29 +118,53 @@ RUN git clone https://github.com/verilator/verilator \
     && cd ../ \
     && rm -rf ./verilator
 
-# Install verible
+# Build, test and install verible
 RUN git clone https://github.com/chipsalliance/verible.git \
     && cd verible \
-    && git checkout v0.0-3640-gec69caeb \
+    && git checkout v0.0-3752-g8b64887e \
     && mkdir -p /tools/verible/bin \
     && bazel-6.5.0 run -c opt :install -- /tools/verible/bin \
     && bazel-6.5.0 test -c opt //... \
     && cd ../ \
     && rm -rf ./verible
 
-# Install qemu
-RUN git clone https://github.com/Xilinx/qemu.git \
-    && cd qemu \
-    && git checkout xlnx_rel_v${XIL_VERSION} \
-    && git submodule update --init dtc \
-    && mkdir build \
-    && cd build \
-    && ../configure --prefix=/tools/qemu --target-list="aarch64-softmmu,microblazeel-softmmu" \
-    --enable-fdt --disable-kvm --disable-xen --enable-gcrypt \
-    && make -j$(nproc) \
-    && make install \
-    && cd ../ \
-    && rm -rf qemu
+USER root
+
+# Install development tools
+RUN curl -sS https://apt.llvm.org/llvm-snapshot.gpg.key > /etc/apt/trusted.gpg.d/apt.llvm.org.asc \
+    && apt-add-repository deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main \
+    && apt-get update \
+    && DEBIAN_FRONTEND='noninteractive' apt-get install --no-install-recommends -y \
+    vim \
+    universal-ctags \
+    gtkwave \
+    device-tree-compiler \
+    libudev-dev \
+    cmake \
+    clang-18 \
+    clang-tools-18 \
+    clang-format-18 \
+    clang-tidy-18 \
+    clangd-18 \
+    lldb-18 \
+    gdb \
+    u-boot-tools \
+    less \
+    libguestfs-tools \
+    linux-image-kvm \
+    ninja-build \
+    qemu-system-arm \
+    && chmod 0644 /boot/vmlinuz* \
+    && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 10 \
+    && update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18 10 \
+    && update-alternatives --install /usr/bin/clangd clangd /usr/bin/clangd-18 10 \
+    && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 10 \
+    && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 10 \
+    && update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-18 10 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 10 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 10
+
+USER xil
 
 WORKDIR /app
 
@@ -179,7 +173,6 @@ ENV XIL_VITIS=/xilinx/Vitis/${XIL_VERSION}
 
 ENV PATH="$PATH:/tools/verible/bin"
 ENV PATH="$PATH:/tools/verilator/bin"
-ENV PATH="$PATH:/tools/qemu/bin"
 
 # Environment variables that get rid of xilinx tools warning/error messages
 ENV TERMINFO=/lib/terminfo

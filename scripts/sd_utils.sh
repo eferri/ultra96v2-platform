@@ -3,7 +3,6 @@ set -eu
 set -o pipefail
 
 DIR="$(git rev-parse --show-toplevel)"
-SDDEV="/dev/sda"
 
 BOOTFS="$DIR/build-sw/mount_bootfs"
 ROOTFS="$DIR/build-sw/mount_rootfs"
@@ -23,7 +22,7 @@ function eject_sd {
     unmount_sd
 
     echo "Ejecting..."
-    sudo eject ${SDDEV}
+    sudo eject ${SD_DEV}
 }
 
 function mount_sd {
@@ -32,12 +31,12 @@ function mount_sd {
 
     sudo mkdir -p "$BOOTFS" || true
     if ! mountpoint -q "$BOOTFS"; then
-        sudo mount "${SDDEV}1" "$BOOTFS"
+        sudo mount "${SD_DEV}1" "$BOOTFS"
     fi
 
     sudo mkdir -p "$ROOTFS" || true
     if ! mountpoint -q "$ROOTFS"; then
-        sudo mount "${SDDEV}2" "$ROOTFS"
+        sudo mount "${SD_DEV}2" "$ROOTFS"
     fi
 }
 
@@ -46,17 +45,17 @@ function partition_sd {
     sudo umount "$ROOTFS" || true
 
     echo "Removing existing partitions ..."
-    sudo parted -s ${SDDEV} rm 1 || true
-    sudo parted -s ${SDDEV} rm 2 || true
+    sudo parted -s ${SD_DEV} rm 1 || true
+    sudo parted -s ${SD_DEV} rm 2 || true
 
     echo "Partitioning drive ..."
-    sudo parted -s "${SDDEV}" -a optimal mklabel msdos \
+    sudo parted -s "${SD_DEV}" -a optimal mklabel msdos \
             mkpart primary fat32 4MB 1000MB \
             mkpart primary ext4  1000MB 100%
     partprobe
 
-    sudo mkfs.vfat -F 32 "${SDDEV}1"
-    sudo mkfs.ext4 -qF "${SDDEV}2"
+    sudo mkfs.vfat -F 32 "${SD_DEV}1"
+    sudo mkfs.ext4 -qF "${SD_DEV}2"
 }
 
 function install {
@@ -75,7 +74,7 @@ function install {
 }
 
 function usage () {
-    echo "Usage: $0 MODE [FILE] [FILE] ...."
+    echo "Usage: $0 DEVICE MODE [FILE] [FILE] ...."
     echo "Modes: install <files> : mount, re-partition SD, install application files and rootfs and eject"
     echo "       eject           : eject SD card"
     echo "       mount           : mount SD card"
@@ -83,10 +82,13 @@ function usage () {
     exit 1
 }
 
-if [ "$#" -eq 0 ]; then
+if [ "$#" -eq 0 ] || [ "$#" -eq 1 ]; then
     usage
     exit 1
 fi
+
+SD_DEV="/dev/$1"
+shift
 
 case "$1" in
     all|install)

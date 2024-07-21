@@ -22,9 +22,9 @@ targets -set -filter {name =~ "PSU"}
 mask_write 0xffca0038 0x1c0 0x0
 
 # Load bitstream to PL
-# targets -set -nocase -filter {name =~ "PL"}
-# fpga build-hw/system.bit
-# after 500
+targets -set -nocase -filter {name =~ "PL"}
+fpga build-hw/system.bit
+after 500
 
 # Reset A53, load and run FSBL. This initializes PS and resets PL
 targets -set -filter {name =~ "Cortex-A53 #0"}

@@ -13,6 +13,3 @@
 [submodule "submodules/device-tree-xlnx"]
 	path = submodules/device-tree-xlnx
 	url = https://github.com/Xilinx/device-tree-xlnx
-[submodule "submodules/qemu-devicetrees"]
-	path = submodules/qemu-devicetrees
-	url = git@github.com:Xilinx/qemu-devicetrees.git
