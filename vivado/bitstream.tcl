@@ -25,6 +25,6 @@ write_verilog -force build-hw/impl_netlist.v
 write_xdc -force -no_fixed_only build-hw/impl.xdc
 write_checkpoint -force build-hw/impl.dcp
 
-write_bitstream -force build-hw/system.bit
+write_bitstream -force -bin_file build-hw/fpga.bit
 
 close_design

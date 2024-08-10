@@ -32,15 +32,18 @@ ATF := build-sw/bl31.elf
 PMUFW := build-sw/zynqmp_pmufw.bin
 
 BOOT_BIN := build-sw/BOOT.bin
+SPL_BOOT_BIN := build-sw/boot.bin
 FSBL := build-sw/zynqmp_fsbl.elf
+PM_CFG_OBJ := build-sw/pm_cfg_obj.bin
 U_BOOT := build-sw/u-boot.elf
+U_BOOT_ITB := build-sw/u-boot.itb
 LINUX := build-sw/Image
 FIT := build-sw/image.ub
 
 ROOTFS := build-sw/rootfs.tar.gz
 
 # fpga
-BIT := build-hw/system.bit
+BIT := build-hw/fpga.bin
 IMPL := build-hw/impl.dcp
 SYNTH := build-hw/synth.dcp
 XSA := build-hw/zynqmp.xsa
@@ -119,8 +122,8 @@ lint:
 
 VIVADO_ARGS := -nojournal -nolog
 
-.PHONY: impl bit
-impl bit $(IMPL) $(BIT): $(SYNTH) $(PFM_DIR)/vivado/bitstream.tcl | build-hw
+.PHONY: bit
+bit $(IMPL) $(BIT): $(SYNTH) $(PFM_DIR)/vivado/bitstream.tcl | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/bitstream.tcl'
 
 .PHONY: synth
@@ -177,25 +180,37 @@ pmufw $(PMUFW): | build-sw
 
 .PHONY: atf
 atf $(ATF): | build-sw
-	$(XIL_BASH) '$(MAKE) -j$$(nproc) CROSS_COMPILE=aarch64-none-elf- PLAT=zynqmp ZYNQMP_CONSOLE=cadence1 RESET_TO_BL31=1 all \
+	$(XIL_BASH) '$(MAKE) -j$$(nproc) CROSS_COMPILE=aarch64-none-elf- PLAT=zynqmp ZYNQMP_CONSOLE=cadence1 RESET_TO_BL31=1 bl31 \
 		-C $(PFM_DIR)/submodules/arm-trusted-firmware \
-	&& cp $(PFM_DIR)/submodules/arm-trusted-firmware/build/zynqmp/release/bl31/bl31.elf $(ATF)'
+	&& cp $(PFM_DIR)/submodules/arm-trusted-firmware/build/zynqmp/release/bl31/bl31.elf $(ATF) \
+	&& cp $(PFM_DIR)/submodules/arm-trusted-firmware/build/zynqmp/release/bl31.bin build-sw/bl31.bin'
+
+.PHONY: pm_cfg_obj
+pm_cfg_obj $(PM_CFG_OBJ): $(XSA) $(PFM_DIR)/scripts/fsbl.tcl | build-sw
+	$(XIL_BASH) 'xsct $(PFM_DIR)/scripts/fsbl.tcl \
+	&& cp build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/libsrc/xilpm_v5_2/src/pm_cfg_obj.c build-sw/pm_cfg_obj.c \
+	&& $(PFM_DIR)/submodules/u-boot/tools/zynqmp_pm_cfg_obj_convert.py build-sw/pm_cfg_obj.c build-sw/pm_cfg_obj.bin'
 
 .PHONY: fsbl
-fsbl $(FSBL): $(XSA) | build-sw
+fsbl $(FSBL): $(XSA) $(PFM_DIR)/scripts/fsbl.tcl | build-sw
 	$(XIL_BASH) 'xsct $(PFM_DIR)/scripts/fsbl.tcl \
 	&& sed -i "s/_BASEADDRESS 0xFF000000/_BASEADDRESS 0xFF010000/g" build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/include/xparameters.h \
 	&& $(MAKE) -C build-sw/fsbl \
 	&& cp build-sw/fsbl/executable.elf $(FSBL)'
 
 .PHONY: u-boot
-u-boot $(U_BOOT): $(DTS) $(PFM_DIR)/bsp/ultra96v2_uboot_defconfig | build-sw
+u-boot $(U_BOOT) $(SPL_BOOT_BIN): $(PMUFW) $(ATF) $(PM_CFG_OBJ) $(DTS) $(PFM_DIR)/bsp/ultra96v2_uboot_defconfig | build-sw
 	$(XIL_BASH) 'mkdir -p $(PFM_DIR)/submodules/u-boot/board/xilinx/zynqmp/ultra96v2 \
 	&& cp $(DTS) $(PFM_DIR)/submodules/u-boot/arch/arm/dts/ultra96v2.dts \
 	&& cp $(PFM_DIR)/bsp/ultra96v2_uboot_defconfig $(PFM_DIR)/submodules/u-boot/configs/ultra96v2_defconfig \
+	&& export BL31=/app/build-sw/bl31.bin \
 	&& $(MAKE) -C $(PFM_DIR)/submodules/u-boot ultra96v2_defconfig \
 	&& CROSS_COMPILE=aarch64-linux-gnu- $(MAKE) -j$$(nproc) -C $(PFM_DIR)/submodules/u-boot \
-	&& cp $(PFM_DIR)/submodules/u-boot/u-boot.elf $(U_BOOT)'
+	&& cp $(PFM_DIR)/submodules/u-boot/u-boot.elf $(U_BOOT) \
+	&& cp $(PFM_DIR)/submodules/u-boot/u-boot.itb $(U_BOOT_ITB) \
+	&& cp $(PFM_DIR)/submodules/u-boot/spl/u-boot-spl.bin build-sw/u-boot-spl.bin \
+	&& cp $(PFM_DIR)/submodules/u-boot/spl/u-boot-spl build-sw/u-boot-spl.elf \
+	&& cp $(PFM_DIR)/submodules/u-boot/spl/boot.bin $(SPL_BOOT_BIN)'
 
 .PHONY: linux
 linux $(LINUX): $(PFM_DIR)/bsp/ultra96v2_linux_defconfig | build-sw
@@ -210,7 +225,7 @@ bin $(BOOT_BIN): $(DTB) $(FSBL) $(PMUFW) $(ATF) $(U_BOOT) $(PFM_DIR)/bsp/boot.bi
 	$(XIL_BASH) 'bootgen -arch zynqmp -image $(PFM_DIR)/bsp/boot.bif -w -o $(BOOT_BIN)'
 
 .PHONY: fit
-fit $(FIT): $(LINUX) $(DTB) | build-sw
+fit $(FIT): $(LINUX) $(DTB) $(PFM_DIR)/bsp/image.its | build-sw
 	$(XIL_BASH) 'mkimage -f $(PFM_DIR)/bsp/image.its $(FIT)'
 
 .PHONY: rootfs
@@ -240,15 +255,25 @@ hw-debug:
 boot:
 	$(XIL_BASH) 'xsdb -interactive $(PFM_DIR)/scripts/boot.tcl'
 
-# SD card files to install
+# Files to install on SD card FAT32 partition
 INSTALL_FILES := \
 	$(BOOT_BIN) \
+	$(FIT) \
+	$(PFM_DIR)/bsp/extlinux
+
+INSTALL_FILES_SPL := \
+	$(SPL_BOOT_BIN) \
+	$(U_BOOT_ITB) \
 	$(FIT) \
 	$(PFM_DIR)/bsp/extlinux
 
 .PHONY: sd
 sd: |
 	$(PFM_DIR)/scripts/sd_utils.sh $(SD_DEV) all $(INSTALL_FILES)
+
+.PHONY: sd-spl
+sd-spl: |
+	$(PFM_DIR)/scripts/sd_utils.sh $(SD_DEV) all $(INSTALL_FILES_SPL)
 
 .PHONY: sd-mount
 sd-mount: |

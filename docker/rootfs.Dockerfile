@@ -1,25 +1,18 @@
 FROM ubuntu:noble-20240605 as rootfs
 
-RUN yes | unminimize
+RUN apt-get update
 
-RUN apt-get update \
-    && DEBIAN_FRONTEND='noninteractive' apt-get upgrade \
-    && DEBIAN_FRONTEND='noninteractive' apt-get install --no-install-recommends -y \
+RUN DEBIAN_FRONTEND='noninteractive' apt-get install --no-install-recommends -y \
     ubuntu-minimal \
     dbus \
     systemd-resolved \
     systemd-timesyncd \
     fpga-manager-xlnx \
-    usbutils \
-    lshw
-
-RUN DEBIAN_FRONTEND='noninteractive' apt-get install --no-install-recommends -y \
     openssh-server \
     vim \
-    htop \
-    git \
-    pigz \
-    less
+    htop
+
+RUN DEBIAN_FRONTEND='noninteractive' apt-get upgrade -y
 
 RUN adduser --disabled-password --gecos "" --shell=/bin/bash zynqmp \
     && echo "zynqmp:zynqmp" | chpasswd \
