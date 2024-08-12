@@ -102,31 +102,62 @@ RUN curl -sS https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > /etc/ap
     bc \
     libssl-dev \
     uuid-dev \
-    libgnutls28-dev
+    libgnutls28-dev \
+    # gtkwave build requirements
+    ninja-build \
+    adwaita-icon-theme-full \
+    cmake \
+    gperf \
+    desktop-file-utils \
+    libgtk-3-dev \
+    libgtk-4-dev \
+    libbz2-dev \
+    libjudy-dev \
+    libgirepository1.0-dev \
+    bzip2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 10 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 10
 
 USER xil
+
+# For meson pip user install
+ENV PATH="$PATH:/home/xil/.local/bin"
 
 # Build, test and install verilator
 RUN git clone https://github.com/verilator/verilator \
     && cd verilator \
-    && git checkout v5.026 \
+    && git checkout v5.028 \
     && autoconf \
     && ./configure --prefix=/tools/verilator \
     && make -j$(nproc) \
     && make test -j$(nproc) \
     && make install \
-    && cd ../ \
+    && cd .. \
     && rm -rf ./verilator
 
 # Build, test and install verible
 RUN git clone https://github.com/chipsalliance/verible.git \
     && cd verible \
-    && git checkout v0.0-3752-g8b64887e \
+    && git checkout v0.0-3756-gda9a0f8c \
     && mkdir -p /tools/verible/bin \
     && bazel-6.5.0 run -c opt :install -- /tools/verible/bin \
     && bazel-6.5.0 test -c opt //... \
-    && cd ../ \
+    && cd .. \
     && rm -rf ./verible
+
+# Build, install gtkwave
+RUN pip3 install --user meson==1.5.1 \
+    && git clone https://github.com/gtkwave/gtkwave.git \
+    && cd gtkwave \
+    && git checkout 6b18383 \
+    && mkdir -p /tools/gtkwave \
+    && meson setup build --buildtype release --prefix /tools/gtkwave \
+    && meson compile -C build \
+    && meson test -C build \
+    && meson install -C build \
+    && cd .. \
+    && rm -rf ./gtkwave
 
 USER root
 
@@ -137,10 +168,8 @@ RUN curl -sS https://apt.llvm.org/llvm-snapshot.gpg.key > /etc/apt/trusted.gpg.d
     && DEBIAN_FRONTEND='noninteractive' apt-get install --no-install-recommends -y \
     vim \
     universal-ctags \
-    gtkwave \
     device-tree-compiler \
     libudev-dev \
-    cmake \
     clang-18 \
     clang-tools-18 \
     clang-format-18 \
@@ -152,17 +181,15 @@ RUN curl -sS https://apt.llvm.org/llvm-snapshot.gpg.key > /etc/apt/trusted.gpg.d
     less \
     libguestfs-tools \
     linux-image-kvm \
-    ninja-build \
     qemu-system-arm \
+    && rm -rf /var/lib/apt/lists/* \
     && chmod 0644 /boot/vmlinuz* \
     && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 10 \
     && update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18 10 \
     && update-alternatives --install /usr/bin/clangd clangd /usr/bin/clangd-18 10 \
     && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 10 \
     && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 10 \
-    && update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-18 10 \
-    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 10 \
-    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 10
+    && update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-18 10
 
 USER xil
 
@@ -173,6 +200,7 @@ ENV XIL_VITIS=/xilinx/Vitis/${XIL_VERSION}
 
 ENV PATH="$PATH:/tools/verible/bin"
 ENV PATH="$PATH:/tools/verilator/bin"
+ENV PATH="$PATH:/tools/gtkwave/bin"
 
 # Environment variables that get rid of xilinx tools warning/error messages
 ENV TERMINFO=/lib/terminfo

@@ -7,11 +7,11 @@ module flash #(
 );
   logic [NBITS-1:0] counter;
 
-  always @(posedge i_clk) begin
-    if (i_reset) begin
-      counter <= counter + 1;
-    end else begin
+  always_ff @(posedge i_clk) begin
+    if (!i_reset) begin
       counter <= '0;
+    end else begin
+      counter <= counter + 1;
     end
   end
   assign o_led = counter[NBITS-1];

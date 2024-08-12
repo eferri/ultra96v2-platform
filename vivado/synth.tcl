@@ -1,10 +1,11 @@
-if { $argc < 2 } {
-    puts "Expected args: <part> <srcs>"
+if { $argc < 3 } {
+    puts "Expected args: <part> <constraint file> <srcs>..."
     exit 1
 }
 
 set part [lindex $argv 0]
-set srcs [lrange $argv 1 end]
+set xdc [lindex $argv 1]
+set srcs [lrange $argv 2 end]
 
 set ws_dir [file dirname [info script]]
 
@@ -14,7 +15,7 @@ set_part $part
 read_bd build-hw/bd/zynqmp/zynqmp.bd
 
 read_verilog -sv $srcs
-read_xdc $ws_dir/constraints.xdc
+read_xdc $xdc
 
 set_msg_config -suppress -severity WARNING -string "zynq_ultra_ps_e_v3_5_1"
 set_msg_config -suppress -severity WARNING -id "Synth 8-3295"

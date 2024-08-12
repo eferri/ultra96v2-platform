@@ -10,8 +10,11 @@ KVM_GID ?= 200
 
 SD_DEV ?= sda
 BD_SRC ?= $(PFM_DIR)/vivado/default_bd.tcl
-RTL_SRCS ?= $(shell cat $(PFM_DIR)/src/rtl.f | sed -e 's/^/$(PFM_DIR)\/src\//; s/\n/ /')
-SYNTH_SRCS ?= $(filter-out rtl/zynqmp.sv, $(RTL_SRCS))
+CONSTRAINTS ?= $(PFM_DIR)/vivado/constraints.xdc
+VERILOG_SRCS ?= $(shell cat $(PFM_DIR)/sources.f | sed -e 's|src|$(PFM_DIR)/src|' | sed -e 's/\n/ /')
+SYNTH_SRCS ?= $(filter-out src/rtl/zynqmp.sv src/sim/%, $(VERILOG_SRCS))
+TOP_MODULE ?= tb
+
 PART ?= xczu3eg-sbva484-1-e
 
 export XIL_VERSION := 2024.1
@@ -98,23 +101,29 @@ docker-image: $(XILINX_TOKEN)
 # simulation
 #
 
-SIM_EXE := build-sim/tb
-
 .PHONY: sim
-sim $(SIM_EXE):
+sim:
+	$(DOCKER_BASH) 'cmake --preset=release \
+	&& cmake --build --preset=release \
+	&& ./build-sim/release/src/sim_exec'
+
+.PHONY: sim-debug
+sim-debug:
 	$(DOCKER_BASH) 'cmake --preset=dev \
 	&& cmake --build --preset=dev'
 
 .PHONY: waves
 waves:
-	$(DOCKER_BASH) 'gtkwave'
+	$(DOCKER_BASH) 'gtkwave \
+		--dump=build-sim/sim.fst \
+		--save=debug.gtkw \
+		--rcfile=.gtkwaverc'
 
 .PHONY: lint
-lint:
-	$(DOCKER_BASH) 'cmake --preset=dev \
-	&& shopt -s globstar \
-	&& clang-tidy -p build-sim/dev src/**/*.cpp  \
-	&& verible-verilog-lint --ruleset all $(RTL_SRCS)'
+lint: sim-debug
+	$(DOCKER_BASH) 'shopt -s globstar \
+	&& verible-verilog-lint --ruleset all --rules_config_search $(VERILOG_SRCS) \
+	&& clang-tidy -p build-sim/dev src/**/*.cpp'
 
 #
 # vivado
@@ -127,8 +136,8 @@ bit $(IMPL) $(BIT): $(SYNTH) $(PFM_DIR)/vivado/bitstream.tcl | build-hw
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/bitstream.tcl'
 
 .PHONY: synth
-synth $(SYNTH): $(BD) $(SYNTH_SRCS) $(PFM_DIR)/vivado/constraints.xdc $(PFM_DIR)/vivado/synth.tcl | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/synth.tcl -tclargs $(PART) $(SYNTH_SRCS)'
+synth $(SYNTH): $(BD) $(SYNTH_SRCS) $(CONSTRAINTS) $(PFM_DIR)/vivado/synth.tcl | build-hw
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/synth.tcl -tclargs $(PART) $(CONSTRAINTS) $(SYNTH_SRCS)'
 
 .PHONY: bd xsa
 bd xsa $(BD) $(XSA): $(PFM_DIR)/vivado/write_bd.tcl $(BD_SRC) $(PFM_DIR)/vivado/zynqmp_preset.tcl | build-hw
@@ -251,6 +260,11 @@ rootfs-shell:
 hw-debug:
 	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/scripts/debug.tcl'
 
+.PHONY: fpgautil
+fpgautil:
+	scp $(BIT) ultra96v2:~ \
+	&& ssh ultra96v2 fpgautil $(notdir $(BIT))
+
 .PHONY: boot
 boot:
 	$(XIL_BASH) 'xsdb -interactive $(PFM_DIR)/scripts/boot.tcl'
@@ -311,7 +325,9 @@ xilinx-config: | $(PFM_DIR)/docker/$(XIL_INSTALLER)
 
 .PHONY: cleansim
 cleansim:
-	rm -rf build-sim
+	rm -rf build-sim \
+		*.fst \
+		*.hier
 
 .PHONY: cleansw
 cleansw:
@@ -348,8 +364,6 @@ cleanhw:
 		.Xil \
 		*.html \
 		*.xml \
-		*.fst \
-		*.hier \
 		*.str \
 		*.pb \
 		clockInfo.txt
