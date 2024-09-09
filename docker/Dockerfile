@@ -208,3 +208,12 @@ ENV NO_AT_BRIDGE=1
 
 # Cleanup
 RUN rm -rf /build/*
+
+# Vivado preferences
+COPY --chown=xil:xil --chmod=660 <<EOF /home/xil/.Xilinx/Vivado/2024.1/vivado.xml
+<?xml version="1.0" encoding="UTF-8"?><preferences VERSION="10">
+    <general>
+        <CONFIRM_EXIT_APPLICATION value="false"/>
+    </general>
+</preferences>
+EOF

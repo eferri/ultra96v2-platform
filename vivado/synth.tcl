@@ -1,13 +1,16 @@
-if { $argc < 3 } {
-    puts "Expected args: <part> <constraint file> <srcs>..."
+if { $argc < 6 } {
+    puts "Expected args: <mode> <part> <debug> <waivers> <constraint file> <srcs>..."
     exit 1
 }
 
-set part [lindex $argv 0]
-set xdc [lindex $argv 1]
-set srcs [lrange $argv 2 end]
+set mode [lindex $argv 0]
+set part [lindex $argv 1]
+set debug [lindex $argv 2]
+set waivers [lindex $argv 3]
+set xdc [lindex $argv 4]
+set srcs [lrange $argv 5 end]
 
-set ws_dir [file dirname [info script]]
+source $waivers
 
 # Vivado will lock BD IP if part isnt't set
 set_part $part
@@ -17,11 +20,29 @@ read_bd build-hw/bd/zynqmp/zynqmp.bd
 read_verilog -sv $srcs
 read_xdc $xdc
 
-set_msg_config -suppress -severity WARNING -string "zynq_ultra_ps_e_v3_5_1"
-set_msg_config -suppress -severity WARNING -id "Synth 8-3295"
+set defines ""
 
-synth_design -name zynqmp -top top -part $part
+if {$debug == "ila"} {
+    set defines "-verilog_define DEBUG=1"
+}
+
+if {$mode == "synth"} {
+    synth_design {*}[split $defines " "] -name zynqmp -top top -part $part
+} elseif {$mode == "elab"} {
+    synth_design {*}[split $defines " "] -rtl -name zynqmp -top top -part $part
+} else {
+    puts "Unexpected mode $mode"
+    exit 1
+}
 
 write_verilog -force build-hw/synth_netlist.v
 write_xdc -force -no_fixed_only build-hw/synth.xdc
-write_checkpoint -force build-hw/synth.dcp
+
+if {$mode == "synth"} {
+    report_timing -input_pins -warn_on_violation
+    report_methodology
+    report_utilization
+    write_checkpoint -force build-hw/synth.dcp
+} elseif {$mode == "elab"} {
+    start_gui
+}

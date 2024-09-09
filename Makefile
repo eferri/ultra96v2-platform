@@ -11,9 +11,11 @@ KVM_GID ?= 200
 SD_DEV ?= sda
 BD_SRC ?= $(PFM_DIR)/vivado/default_bd.tcl
 CONSTRAINTS ?= $(PFM_DIR)/vivado/constraints.xdc
+WAIVERS ?= $(PFM_DIR)/vivado/waivers.tcl
 VERILOG_SRCS ?= $(shell cat $(PFM_DIR)/sources.f | sed -e 's|src|$(PFM_DIR)/src|' | sed -e 's/\n/ /')
 SYNTH_SRCS ?= $(filter-out src/rtl/zynqmp.sv src/sim/%, $(VERILOG_SRCS))
 TOP_MODULE ?= tb
+DEBUG_DESIGN ?= no
 
 PART ?= xczu3eg-sbva484-1-e
 
@@ -133,15 +135,19 @@ VIVADO_ARGS := -nojournal -nolog
 
 .PHONY: bit
 bit $(IMPL) $(BIT): $(SYNTH) $(PFM_DIR)/vivado/bitstream.tcl | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/bitstream.tcl'
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/bitstream.tcl -tclargs $(DEBUG_DESIGN) $(WAIVERS)'
 
 .PHONY: synth
 synth $(SYNTH): $(BD) $(SYNTH_SRCS) $(CONSTRAINTS) $(PFM_DIR)/vivado/synth.tcl | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/synth.tcl -tclargs $(PART) $(CONSTRAINTS) $(SYNTH_SRCS)'
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/synth.tcl -tclargs synth $(PART) $(DEBUG_DESIGN) $(WAIVERS) $(CONSTRAINTS) $(SYNTH_SRCS)'
+
+.PHONY: elab
+elab: $(BD) $(SYNTH_SRCS) $(CONSTRAINTS) $(PFM_DIR)/vivado/synth.tcl | build-hw
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/synth.tcl -tclargs elab $(PART) $(DEBUG_DESIGN) $(WAIVERS) $(CONSTRAINTS) $(SYNTH_SRCS)'
 
 .PHONY: bd xsa
 bd xsa $(BD) $(XSA): $(PFM_DIR)/vivado/write_bd.tcl $(BD_SRC) $(PFM_DIR)/vivado/zynqmp_preset.tcl | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/write_bd.tcl -tclargs $(PART) $(BD_SRC)'
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/write_bd.tcl -tclargs $(PART) $(DEBUG_DESIGN) $(BD_SRC)'
 
 # Interactive commands
 .PHONY: vivado-shell
@@ -154,7 +160,7 @@ vivado-gui:
 
 .PHONY: edit-bd
 edit-bd: | build-hw
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode tcl -source $(PFM_DIR)/vivado/edit_bd.tcl -tclargs $(PART) $(BD_SRC)'
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode tcl -source $(PFM_DIR)/vivado/edit_bd.tcl -tclargs $(PART) $(DEBUG_DESIGN) $(BD_SRC)'
 
 
 #
@@ -229,12 +235,12 @@ linux $(LINUX): $(PFM_DIR)/bsp/ultra96v2_linux_defconfig | build-sw
 	&& $(MAKE) ARCH=arm64 -j$$(nproc) -C $(PFM_DIR)/submodules/linux \
 	&& cp $(PFM_DIR)/submodules/linux/arch/arm64/boot/Image $(LINUX)'
 
-.PHONY: bin
-bin $(BOOT_BIN): $(DTB) $(FSBL) $(PMUFW) $(ATF) $(U_BOOT) $(PFM_DIR)/bsp/boot.bif | build-sw
+.PHONY: boot_bin
+boot_bin $(BOOT_BIN): $(DTB) $(FSBL) $(PMUFW) $(ATF) $(U_BOOT) $(PFM_DIR)/bsp/boot.bif | build-sw
 	$(XIL_BASH) 'bootgen -arch zynqmp -image $(PFM_DIR)/bsp/boot.bif -w -o $(BOOT_BIN)'
 
-.PHONY: fit
-fit $(FIT): $(LINUX) $(DTB) $(PFM_DIR)/bsp/image.its | build-sw
+.PHONY: fit_image
+fit_image $(FIT): $(LINUX) $(DTB) $(PFM_DIR)/bsp/image.its | build-sw
 	$(XIL_BASH) 'mkimage -f $(PFM_DIR)/bsp/image.its $(FIT)'
 
 .PHONY: rootfs
@@ -258,7 +264,7 @@ rootfs-shell:
 
 .PHONY: hw-debug
 hw-debug:
-	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/scripts/debug.tcl'
+	$(XIL_BASH) 'vivado $(VIVADO_ARGS) -mode batch -source $(PFM_DIR)/vivado/debug.tcl'
 
 .PHONY: fpgautil
 fpgautil:
@@ -325,36 +331,11 @@ xilinx-config: | $(PFM_DIR)/docker/$(XIL_INSTALLER)
 
 .PHONY: cleansim
 cleansim:
-	rm -rf build-sim \
-		*.fst \
-		*.hier
+	rm -rf build-sim
 
 .PHONY: cleansw
 cleansw:
-	rm -rf $(LINUX) \
-		build-sw/*.bin \
-		build-sw/*.elf \
-		build-sw/*.ub \
-		build-sw/*.dts \
-		build-sw/*.dtb
-
-
-.PHONY: cleanall
-cleanall: cleansim cleanallsw cleanhw
-	rm -rf verible.filelist
-
-.PHONY: cleanallsw
-cleanallsw:
-	$(XIL_BASH) 'rm -rf build-sw \
-		$(PFM_DIR)/submodules/u-boot/arch/arm/dts/ultra96v2.dts \
-		$(PFM_DIR)/submodules/u-boot/configs/ultra96v2_defconfig \
-		$(PFM_DIR)/submodules/u-boot/board/xilinx/zynqmp/ultra96v2 \
-		$(PFM_DIR)/submodules/linux/arch/arm64/configs/ultra96v2_defconfig \
-	&& sed -i "s/_BASEADDRESS 0xFF010000/_BASEADDRESS 0xFF000000/g" $(PFM_DIR)/submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/misc/xparameters.h \
-	&& $(MAKE) -C $(PFM_DIR)/submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/src clean \
-	&& $(MAKE) PLAT=zynqmp -C $(PFM_DIR)/submodules/arm-trusted-firmware clean \
-	&& $(MAKE) -C $(PFM_DIR)/submodules/u-boot distclean \
-	&& $(MAKE) -C $(PFM_DIR)/submodules/linux distclean'
+	rm -rf build-sw
 
 .PHONY: cleanhw
 cleanhw:
@@ -367,6 +348,21 @@ cleanhw:
 		*.str \
 		*.pb \
 		clockInfo.txt
+
+.PHONY: cleannested
+cleannested:
+	$(XIL_BASH) 'rm -rf $(PFM_DIR)/submodules/u-boot/arch/arm/dts/ultra96v2.dts \
+		$(PFM_DIR)/submodules/u-boot/configs/ultra96v2_defconfig \
+		$(PFM_DIR)/submodules/u-boot/board/xilinx/zynqmp/ultra96v2 \
+		$(PFM_DIR)/submodules/linux/arch/arm64/configs/ultra96v2_defconfig \
+	&& git -C $(PFM_DIR)/submodules/embeddedsw checkout . \
+	&& $(MAKE) -C $(PFM_DIR)/submodules/embeddedsw/lib/sw_apps/zynqmp_pmufw/src clean \
+	&& $(MAKE) PLAT=zynqmp -C $(PFM_DIR)/submodules/arm-trusted-firmware clean \
+	&& $(MAKE) -C $(PFM_DIR)/submodules/u-boot distclean \
+	&& $(MAKE) -C $(PFM_DIR)/submodules/linux distclean'
+
+.PHONY: cleanall
+cleanall: cleansim cleansw cleanhw cleannested
 
 build-hw build-sw build-sw/mount build-sim:
 	mkdir -p $@
