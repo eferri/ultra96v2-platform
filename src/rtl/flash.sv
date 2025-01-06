@@ -1,18 +1,18 @@
 module flash #(
-    NBITS = 28
+    int NBITS = 28
 ) (
-    input  logic i_clk,
-    input  logic i_reset,
-    output logic o_led
+    input  logic clk_i,
+    input  logic rst_i,
+    output logic led_o
 );
   logic [NBITS-1:0] counter;
 
-  always_ff @(posedge i_clk) begin
-    if (!i_reset) begin
+  always_ff @(posedge clk_i) begin
+    if (!rst_i) begin
       counter <= '0;
     end else begin
       counter <= counter + 1;
     end
   end
-  assign o_led = counter[NBITS-1];
+  assign led_o = counter[NBITS-1];
 endmodule

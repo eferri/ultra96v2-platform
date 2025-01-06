@@ -1,0 +1,76 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 22,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "displayName": "Base Config",
+            "generator": "Ninja",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_STANDARD": {
+                    "type": "STRING",
+                    "value": "20"
+                },
+                "CMAKE_CXX_STANDARD_REQUIRED": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                },
+                "CMAKE_CXX_EXTENSIONS": {
+                    "type": "BOOL",
+                    "value": "FALSE"
+                }
+            }
+        },
+        {
+            "name": "dev",
+            "displayName": "Dev Config",
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/build-sim/dev",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": {
+                    "type": "STRING",
+                    "value": "Debug"
+                },
+                "CMAKE_EXPORT_COMPILE_COMMANDS": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                },
+                "VERILATOR_EXTRA_ARGS": {
+                    "type": "STRING",
+                    "value": "-O0"
+                }
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "Release Config",
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/build-sim/release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": {
+                    "type": "STRING",
+                    "value": "Release"
+                },
+                "VERILATOR_EXTRA_ARGS": {
+                    "type": "STRING",
+                    "value": "-O3"
+                }
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "dev",
+            "configurePreset": "dev"
+        },
+        {
+            "name": "release",
+            "configurePreset": "release"
+        }
+    ]
+}

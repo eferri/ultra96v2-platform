@@ -5,14 +5,45 @@
         "editor.detectIndentation": false,
         "editor.defaultFormatter": "mshr-h.veriloghdl"
     },
+    "[cpp]": {
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
     "[tcl]": {
         "editor.formatOnSave": false
     },
     "editor.formatOnSave": true,
-    "search.exclude": {
-        "submodules": true
-    },
-    "verilog.ctags.path": "ctags",
+    "editor.inlayHints.enabled": "offUnlessPressed",
     "verilog.formatting.veribleVerilogFormatter.path": "verible-verilog-format",
-    "verilog.linting.linter": "none"
+    "verible.path": "verible-verilog-ls",
+    "verible.arguments": [
+        "--ruleset",
+        "all",
+        "--rules_config_search",
+        "--file_list_path",
+        "./sources.f",
+    ],
+    "cSpell.words": [
+        "Verilated",
+        "Vtop"
+    ],
+    "cSpell.languageSettings": [
+        {
+            "languageId": "verilog,systemverilog,cpp,c,dts",
+            "includeRegExpList": [
+                "comments",
+                "strings",
+                "CStyleComment",
+            ]
+        },
+    ],
+    "files.associations": {
+        ".clang-tidy": "yaml",
+        ".clang-format": "yaml",
+        ".clangd": "yaml"
+    },
+    "search.exclude": {
+        "build-*/**": true,
+        ".Xil/**": true,
+        "submodules/**": true,
+    }
 }

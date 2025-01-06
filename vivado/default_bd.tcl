@@ -26,8 +26,8 @@ set config [ concat $preset_config $user_config ]
 set_property -dict "$config" [get_bd_cells zynqmp]
 
 # Ports
-create_bd_port -dir O reset
-create_bd_port -dir O clk
+create_bd_port -dir O rst_o
+create_bd_port -dir O clk_o
 
-connect_bd_net [get_bd_ports clk] [get_bd_pins zynqmp/pl_clk0]
-connect_bd_net [get_bd_ports reset] [get_bd_pins zynqmp/pl_resetn0]
+connect_bd_net [get_bd_ports clk_o] [get_bd_pins zynqmp/pl_clk0]
+connect_bd_net [get_bd_ports rst_o] [get_bd_pins zynqmp/pl_resetn0]

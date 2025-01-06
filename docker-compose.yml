@@ -9,7 +9,7 @@ services:
     devices:
       - /dev/kvm:/dev/kvm
     # Uncomment to run jtag boot script
-    privileged: true
+    # privileged: true
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - ~/.Xauthority:/home/xil/.Xauthority

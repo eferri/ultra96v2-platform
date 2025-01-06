@@ -1,4 +1,4 @@
-FROM ubuntu:noble-20240605 as rootfs
+FROM ubuntu:noble-20241118.1 as rootfs
 
 RUN apt-get update
 

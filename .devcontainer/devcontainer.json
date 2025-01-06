@@ -5,13 +5,15 @@
         "vscode": {
             "extensions": [
                 "ms-azuretools.vscode-docker",
-                "ms-vscode.cpptools",
+                "llvm-vs-code-extensions.vscode-clangd",
                 "bitwisecook.tcl",
                 "shardulm94.trailing-spaces",
-                "eugenwiens.bitbake",
+                "yocto-project.yocto-bitbake",
                 "mshr-h.VerilogHDL",
                 "plorefice.devicetree",
-                "chipsalliance.verible"
+                "chipsalliance.verible",
+                "streetsidesoftware.code-spell-checker",
+                "twxs.cmake"
             ]
         }
     },

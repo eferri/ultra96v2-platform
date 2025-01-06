@@ -1,22 +1,22 @@
 
 module top (
-    output logic led_1,
-    output logic led_2
+    output logic led_1_o,
+    output logic led_2_o
 );
   logic clk;
-  logic reset;
+  logic rst;
 
   zynqmp zynqmp (
-      .clk,
-      .reset
+      .clk_o(clk),
+      .rst_o(rst)
   );
 
   flash flash_0 (
-      .i_clk  (clk),
-      .i_reset(reset),
-      .o_led  (led_1)
+      .clk_i(clk),
+      .rst_i(rst),
+      .led_o(led_1_o)
   );
 
-  assign led_2 = 1'b1;
+  assign led_2_o = 1'b1;
 
 endmodule

@@ -1,0 +1,4 @@
+CompileFlags:
+  CompilationDatabase: build-sim/dev
+Diagnostics:
+  MissingIncludes: Strict

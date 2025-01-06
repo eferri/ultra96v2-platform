@@ -2,24 +2,24 @@ include(ProcessorCount)
 
 ProcessorCount(nproc)
 
-find_package(verilator)
-
-file(STRINGS rtl.f rtl_filelist)
+find_package(VERILATOR)
 
 add_executable(sim_exec tb.cpp)
 target_compile_features(sim_exec PUBLIC cxx_std_20)
+target_link_libraries(sim_exec tb)
 
-verilate(sim_exec TOP_MODULE top PREFIX Vtop
+add_library(tb STATIC)
+verilate(tb TOP_MODULE tb PREFIX Vtb
 VERILATOR_ARGS
-    -O3
+	${VERILATOR_EXTRA_ARGS}
 	-Wall
+	--assert
 	--verilate-jobs 0
-	--threads ${nproc}
-	--threads-dpi all
+	--threads 1
 	--timing
 	--trace-fst
-	--trace-threads 2
+	--trace-threads 1
 	--timescale 1ns/1ns
 	--clk top.zynqmp.clk
-SOURCES ${rtl_filelist}
+SOURCES ${VERILOG_FILELIST}
 )

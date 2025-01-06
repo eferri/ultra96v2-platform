@@ -13,17 +13,17 @@ BD_SRC ?= $(PFM_DIR)/vivado/default_bd.tcl
 CONSTRAINTS ?= $(PFM_DIR)/vivado/constraints.xdc
 WAIVERS ?= $(PFM_DIR)/vivado/waivers.tcl
 VERILOG_SRCS ?= $(shell cat $(PFM_DIR)/sources.f | sed -e 's|src|$(PFM_DIR)/src|' | sed -e 's/\n/ /')
-SYNTH_SRCS ?= $(filter-out src/rtl/zynqmp.sv src/sim/%, $(VERILOG_SRCS))
+SYNTH_SRCS ?= $(filter-out $(PFM_DIR)/src/rtl/zynqmp.sv $(PFM_DIR)/src/sim/%, $(VERILOG_SRCS))
 TOP_MODULE ?= tb
 DEBUG_DESIGN ?= no
 
 PART ?= xczu3eg-sbva484-1-e
 
-export XIL_VERSION := 2024.1
+export XIL_VERSION := 2024.2
 
-XIL_INSTALLER := FPGAs_AdaptiveSoCs_Unified_$(XIL_VERSION)_0522_2023
-XIL_INSTALLER_TAR := $(XIL_INSTALLER).tar.gz
-XIL_INSTALLER_MD5 := 372c0b184e32001137424e395823de3c
+XIL_INSTALLER := FPGAs_AdaptiveSoCs_Unified_$(XIL_VERSION)_1113_1001
+XIL_INSTALLER_TAR := $(XIL_INSTALLER).tar
+XIL_INSTALLER_MD5 :=  0ca31a787bbdff82b55213522e604446
 
 #
 # outputs
@@ -63,22 +63,16 @@ all: $(BIT) $(BOOT_BIN) $(FIT) $(ROOTFS)
 #
 
 # Run command in bash shell with xilinx tools sourced
-DOCKER_ARGS := --project-directory . -f $(PFM_DIR)/docker-compose.yml
-DOCKER_COMPOSE := docker compose $(DOCKER_ARGS)
+DOCKER_COMPOSE := docker compose --project-directory . -f $(PFM_DIR)/docker-compose.yml
 
 DOCKER_RUN := $(DOCKER_COMPOSE) run --rm xil
 DOCKER_RUN_ROOT := $(DOCKER_COMPOSE) run --user root --rm xil
 
-DOCKER_BASH := $(DOCKER_RUN) bash -c
-XIL_BASH := $(DOCKER_RUN) bash --rcfile /xilinx/Vitis/$(XIL_VERSION)/settings64.sh -ic
+XIL_BASH := $(DOCKER_RUN) bash -ic
 
 .PHONY: shell
 shell:
 	$(DOCKER_RUN) bash -i
-
-.PHONY: xil-shell
-xil-shell:
-	$(DOCKER_RUN) bash --rcfile /xilinx/Vitis/$(XIL_VERSION)/settings64.sh -i
 
 .PHONY: root-shell
 root-shell:
@@ -105,25 +99,25 @@ docker-image: $(XILINX_TOKEN)
 
 .PHONY: sim
 sim:
-	$(DOCKER_BASH) 'cmake --preset=release \
+	$(XIL_BASH) 'cmake --preset=release \
 	&& cmake --build --preset=release \
 	&& ./build-sim/release/src/sim_exec'
 
 .PHONY: sim-debug
 sim-debug:
-	$(DOCKER_BASH) 'cmake --preset=dev \
+	$(XIL_BASH) 'cmake --preset=dev \
 	&& cmake --build --preset=dev'
 
 .PHONY: waves
 waves:
-	$(DOCKER_BASH) 'gtkwave \
+	$(XIL_BASH) 'gtkwave \
 		--dump=build-sim/sim.fst \
 		--save=debug.gtkw \
 		--rcfile=.gtkwaverc'
 
 .PHONY: lint
 lint: sim-debug
-	$(DOCKER_BASH) 'shopt -s globstar \
+	$(XIL_BASH) 'shopt -s globstar \
 	&& verible-verilog-lint --ruleset all --rules_config_search $(VERILOG_SRCS) \
 	&& clang-tidy -p build-sim/dev src/**/*.cpp'
 
@@ -181,8 +175,8 @@ dts-gen: $(XSA) $(PFM_DIR)/scripts/dts.tcl
 
 .PHONY: dtb
 dtb $(DTB) $(DTS): $(DTS_SRCS) | build-sw
-	$(XIL_BASH) 'gcc -I device-tree -I $(PFM_DIR)/submodules/linux -E -nostdinc -undef \
-					 -D__DTS__ -x assembler-with-cpp -o $(DTS) $(PFM_DIR)/device-tree/system-top.dts \
+	$(XIL_BASH) 'gcc -I device-tree -I $(PFM_DIR)/submodules/linux -I $(PFM_DIR)/submodules/linux/include \
+		-E -nostdinc -undef -D__DTS__ -x assembler-with-cpp -o $(DTS) $(PFM_DIR)/device-tree/system-top.dts \
 	&& dtc -I dts -O dtb -o $(DTB) $(DTS)'
 
 .PHONY: pmufw
@@ -203,7 +197,7 @@ atf $(ATF): | build-sw
 .PHONY: pm_cfg_obj
 pm_cfg_obj $(PM_CFG_OBJ): $(XSA) $(PFM_DIR)/scripts/fsbl.tcl | build-sw
 	$(XIL_BASH) 'xsct $(PFM_DIR)/scripts/fsbl.tcl \
-	&& cp build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/libsrc/xilpm_v5_2/src/pm_cfg_obj.c build-sw/pm_cfg_obj.c \
+	&& cp build-sw/fsbl/zynqmp_fsbl_bsp/psu_cortexa53_0/libsrc/xilpm_v5_3/src/pm_cfg_obj.c build-sw/pm_cfg_obj.c \
 	&& $(PFM_DIR)/submodules/u-boot/tools/zynqmp_pm_cfg_obj_convert.py build-sw/pm_cfg_obj.c build-sw/pm_cfg_obj.bin'
 
 .PHONY: fsbl
@@ -318,7 +312,7 @@ sd-partition: |
 .PHONY: xilinx-extract
 xilinx-extract $(PFM_DIR)/docker/$(XIL_INSTALLER):
 	md5sum $(PFM_DIR)/docker/$(XIL_INSTALLER_TAR) | grep $(XIL_INSTALLER_MD5) \
-	&& tar -I pigz -xvf $(PFM_DIR)/docker/$(XIL_INSTALLER_TAR) -C $(PFM_DIR)/docker
+	&& tar -xvf $(PFM_DIR)/docker/$(XIL_INSTALLER_TAR) -C $(PFM_DIR)/docker
 
 .PHONY: xilinx-config
 xilinx-config: | $(PFM_DIR)/docker/$(XIL_INSTALLER)
